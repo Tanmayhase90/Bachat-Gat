@@ -1,0 +1,17 @@
+{
+  "name": "bachat-gat-monorepo",
+  "version": "1.0.0",
+  "description": "Bachat Gat – Digital Savings Group Management System",
+  "scripts": {
+    "db:setup": "node database/setup.js",
+    "test:api": "node server/test-api.js",
+    "server:install": "cd server && npm install",
+    "client:install": "cd client && npm install",
+    "install:all": "npm run server:install && npm run client:install",
+    "server:dev": "cd server && npm run dev",
+    "client:dev": "cd client && npm run dev"
+  },
+  "keywords": ["bachat-gat", "microfinance", "react", "express", "mysql"],
+  "author": "Internship Project",
+  "license": "ISC"
+}

@@ -4,6 +4,220 @@ const pool = require('../config/db');
 const { logActivity, createNotification } = require('../utils/logger');
 
 /**
+ * Helper to fetch active group info dynamically from database
+ */
+async function getGroupInfoForUser(userId, explicitGroupId = null) {
+  // 1. Check if user is linked in group_members
+  const [memberRows] = await pool.query(
+    `SELECT gm.id as member_id, gm.member_code, gm.joined_date, gm.monthly_contribution, gm.group_id, g.group_name, g.group_code 
+     FROM group_members gm 
+     JOIN \`groups\` g ON gm.group_id = g.id 
+     WHERE gm.user_id = ? AND gm.is_active = 1 LIMIT 1`,
+    [userId]
+  );
+
+  if (memberRows.length > 0) {
+    return {
+      groupId: memberRows[0].group_id,
+      memberId: memberRows[0].member_id,
+      memberCode: memberRows[0].member_code,
+      joinedDate: memberRows[0].joined_date,
+      monthlyContribution: parseFloat(memberRows[0].monthly_contribution) || 1000,
+      groupName: memberRows[0].group_name,
+      groupCode: memberRows[0].group_code,
+    };
+  }
+
+  // 2. Fallback: Query groups table directly
+  const targetGroupId = explicitGroupId || 1;
+  const [groupRows] = await pool.query(
+    'SELECT id, group_name, group_code, monthly_contribution_per_share FROM `groups` WHERE id = ? OR 1=1 ORDER BY id ASC LIMIT 1',
+    [targetGroupId]
+  );
+
+  if (groupRows.length > 0) {
+    return {
+      groupId: groupRows[0].id,
+      memberId: null,
+      memberCode: null,
+      joinedDate: null,
+      monthlyContribution: parseFloat(groupRows[0].monthly_contribution_per_share) || 1000,
+      groupName: groupRows[0].group_name,
+      groupCode: groupRows[0].group_code,
+    };
+  }
+
+  return {
+    groupId: 1,
+    memberId: null,
+    memberCode: null,
+    joinedDate: null,
+    monthlyContribution: 1000,
+    groupName: 'Bachat Gat',
+    groupCode: 'group_001',
+  };
+}
+
+/**
+ * POST /api/auth/register
+ * Self-registration for new group members
+ */
+async function register(req, res, next) {
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    const { fullName, name, email, phone, password, confirmPassword } = req.body;
+    const userName = (fullName || name || '').trim();
+    const userEmail = (email || '').trim().toLowerCase();
+    const userPhone = (phone || '').trim();
+
+    // 1. Validate required fields
+    if (!userName || !userEmail || !userPhone || !password || !confirmPassword) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'All fields (Full Name, Email, Phone, Password, Confirm Password) are required.',
+      });
+    }
+
+    // 2. Validate Full Name
+    if (userName.length < 2) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Full Name must be at least 2 characters.',
+      });
+    }
+
+    // 3. Validate Email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(userEmail)) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid email address.',
+      });
+    }
+
+    // 4. Validate Phone Number (10 to 15 digits)
+    const cleanPhone = userPhone.replace(/[\s\-+()]/g, '');
+    if (cleanPhone.length < 10 || isNaN(cleanPhone)) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Please enter a valid phone number with at least 10 digits.',
+      });
+    }
+
+    // 5. Validate Password standards
+    if (password.length < 6) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be at least 6 characters long.',
+      });
+    }
+
+    // 6. Check Password Confirmation
+    if (password !== confirmPassword) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Passwords do not match.',
+      });
+    }
+
+    // 7. Check if Email already exists
+    const [existingEmailRows] = await connection.query(
+      'SELECT id FROM users WHERE email = ?',
+      [userEmail]
+    );
+
+    if (existingEmailRows.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already registered. Please login to continue.',
+      });
+    }
+
+    // 8. Check if Phone number already exists
+    const [existingPhoneRows] = await connection.query(
+      'SELECT id FROM users WHERE phone = ?',
+      [userPhone]
+    );
+
+    if (existingPhoneRows.length > 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number is already registered with another account.',
+      });
+    }
+
+    // 9. Hash Password securely using bcrypt
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // 10. Insert User with default role = MEMBER
+    const [userResult] = await connection.query(
+      'INSERT INTO users (name, email, phone, password, role, role_name, is_active) VALUES (?, ?, ?, ?, ?, ?, 1)',
+      [userName, userEmail, userPhone, hashedPassword, 'MEMBER', 'MEMBER']
+    );
+    const newUserId = userResult.insertId;
+
+    // 11. Connect new user to the default group if exists
+    const [groups] = await connection.query('SELECT id, monthly_contribution_per_share FROM `groups` LIMIT 1');
+    let groupId = 1;
+    let monthlyShare = 1000.00;
+
+    if (groups.length > 0) {
+      groupId = groups[0].id;
+      monthlyShare = parseFloat(groups[0].monthly_contribution_per_share) || 1000.00;
+    }
+
+    const memberCode = `MEM-${String(newUserId).padStart(3, '0')}`;
+    const today = new Date().toISOString().split('T')[0];
+
+    await connection.query(
+      'INSERT INTO group_members (group_id, user_id, member_code, joined_date, monthly_contribution, is_active) VALUES (?, ?, ?, ?, ?, 1)',
+      [groupId, newUserId, memberCode, today, monthlyShare]
+    );
+
+    // 12. Create Welcome Notification & Activity Log
+    await logActivity(
+      groupId,
+      newUserId,
+      'USER_REGISTERED',
+      `${userName} self-registered as a new member (${memberCode})`,
+      connection
+    );
+
+    await createNotification(
+      newUserId,
+      groupId,
+      'Welcome to Bachat Gat',
+      `Your account has been registered successfully as member ${memberCode}. You can now contribute savings and apply for loans.`,
+      'SUCCESS',
+      connection
+    );
+
+    await connection.commit();
+
+    return res.status(201).json({
+      success: true,
+      message: 'Registration successful! Please login to continue.',
+      userId: newUserId,
+    });
+  } catch (err) {
+    await connection.rollback();
+    next(err);
+  } finally {
+    connection.release();
+  }
+}
+
+/**
  * POST /api/auth/login
  */
 async function login(req, res, next) {
@@ -36,16 +250,8 @@ async function login(req, res, next) {
 
     const roleName = user.role_name || user.role || 'MEMBER';
 
-    // Get group & member context if available
-    const [memberRows] = await pool.query(
-      `SELECT gm.id as member_id, gm.member_code, gm.group_id, g.group_name 
-       FROM group_members gm 
-       JOIN \`groups\` g ON gm.group_id = g.id 
-       WHERE gm.user_id = ? AND gm.is_active = 1 LIMIT 1`,
-      [user.id]
-    );
-
-    const memberInfo = memberRows.length > 0 ? memberRows[0] : null;
+    // Get fresh dynamic group & member context from database
+    const groupInfo = await getGroupInfoForUser(user.id);
 
     const tokenPayload = {
       id: user.id,
@@ -53,8 +259,8 @@ async function login(req, res, next) {
       role: roleName,
       role_name: roleName,
       name: user.name,
-      groupId: memberInfo ? memberInfo.group_id : 1,
-      memberId: memberInfo ? memberInfo.member_id : null,
+      groupId: groupInfo.groupId,
+      memberId: groupInfo.memberId,
     };
 
     const secret = process.env.JWT_SECRET || 'bachat_gat_super_secret_jwt_key_2026_internship_production';
@@ -81,10 +287,11 @@ async function login(req, res, next) {
         phone: user.phone,
         role: roleName,
         role_name: roleName,
-        groupId: tokenPayload.groupId,
-        memberId: tokenPayload.memberId,
-        memberCode: memberInfo ? memberInfo.member_code : null,
-        groupName: memberInfo ? memberInfo.group_name : 'Chhatrapati Bachat Gat',
+        groupId: groupInfo.groupId,
+        memberId: groupInfo.memberId,
+        memberCode: groupInfo.memberCode,
+        groupName: groupInfo.groupName,
+        groupCode: groupInfo.groupCode,
       },
     });
   } catch (err) {
@@ -109,15 +316,8 @@ async function getMe(req, res, next) {
     const user = userRows[0];
     const roleName = user.role_name || user.role || 'MEMBER';
 
-    const [memberRows] = await pool.query(
-      `SELECT gm.id as member_id, gm.member_code, gm.joined_date, gm.monthly_contribution, gm.group_id, g.group_name, g.group_code 
-       FROM group_members gm 
-       JOIN \`groups\` g ON gm.group_id = g.id 
-       WHERE gm.user_id = ? LIMIT 1`,
-      [user.id]
-    );
-
-    const member = memberRows.length > 0 ? memberRows[0] : null;
+    // Get fresh dynamic group & member context from database
+    const groupInfo = await getGroupInfoForUser(user.id, req.user.groupId);
 
     res.json({
       success: true,
@@ -125,13 +325,13 @@ async function getMe(req, res, next) {
         ...user,
         role: roleName,
         role_name: roleName,
-        groupId: member ? member.group_id : 1,
-        memberId: member ? member.member_id : null,
-        memberCode: member ? member.member_code : null,
-        joinedDate: member ? member.joined_date : null,
-        monthlyContribution: member ? member.monthly_contribution : 1000,
-        groupName: member ? member.group_name : 'Chhatrapati Bachat Gat',
-        groupCode: member ? member.group_code : 'shivshahi_group_001',
+        groupId: groupInfo.groupId,
+        memberId: groupInfo.memberId,
+        memberCode: groupInfo.memberCode,
+        joinedDate: groupInfo.joinedDate,
+        monthlyContribution: groupInfo.monthlyContribution,
+        groupName: groupInfo.groupName,
+        groupCode: groupInfo.groupCode,
       },
     });
   } catch (err) {
@@ -176,6 +376,7 @@ async function updateProfile(req, res, next) {
 }
 
 module.exports = {
+  register,
   login,
   getMe,
   updateProfile,

@@ -83,9 +83,16 @@ async function getDashboardSummary(req, res, next) {
       };
     }
 
+    // 7. Group Info
+    const [groupRows] = await pool.query('SELECT group_name, group_code FROM `groups` WHERE id = ?', [groupId]);
+    const groupName = groupRows.length > 0 ? groupRows[0].group_name : 'Bachat Gat';
+    const groupCode = groupRows.length > 0 ? groupRows[0].group_code : 'group_001';
+
     res.json({
       success: true,
       summary: {
+        groupName,
+        groupCode,
         totalGroupFund,
         totalSavings,
         activeLoans,

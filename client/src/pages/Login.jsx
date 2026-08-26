@@ -1,15 +1,28 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2, UserPlus } from 'lucide-react';
 
 const Login = () => {
-  const [email, setEmail] = useState('admin@bachatgat.com');
-  const [password, setPassword] = useState('Admin@123');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
+  const [email, setEmail] = useState(location.state?.registeredEmail || 'admin@bachatgat.com');
+  const [password, setPassword] = useState(location.state?.registeredEmail ? '' : 'Admin@123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const [successInfo, setSuccessInfo] = useState(location.state?.message || '');
+
+  useEffect(() => {
+    if (location.state?.message) {
+      setSuccessInfo(location.state.message);
+    }
+    if (location.state?.registeredEmail) {
+      setEmail(location.state.registeredEmail);
+      setPassword('');
+    }
+  }, [location.state]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -21,6 +34,7 @@ const Login = () => {
     try {
       setLoading(true);
       setError('');
+      setSuccessInfo('');
       await login(email, password);
       navigate('/dashboard');
     } catch (err) {
@@ -39,6 +53,7 @@ const Login = () => {
       setPassword('Member@123');
     }
     setError('');
+    setSuccessInfo('');
   };
 
   return (
@@ -63,7 +78,7 @@ const Login = () => {
           width: '500px',
           height: '500px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(194, 24, 91, 0.08) 0%, rgba(255,255,255,0) 70%)',
+          background: 'radial-gradient(circle, rgba(190, 24, 93, 0.08) 0%, rgba(255,255,255,0) 70%)',
           zIndex: 0,
         }}
       />
@@ -75,7 +90,7 @@ const Login = () => {
           width: '450px',
           height: '450px',
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(233, 30, 99, 0.06) 0%, rgba(255,255,255,0) 70%)',
+          background: 'radial-gradient(circle, rgba(219, 39, 119, 0.06) 0%, rgba(255,255,255,0) 70%)',
           zIndex: 0,
         }}
       />
@@ -169,6 +184,27 @@ const Login = () => {
           </div>
         </div>
 
+        {/* Success Alert from Register Page */}
+        {successInfo && (
+          <div
+            style={{
+              padding: '10px 14px',
+              background: 'var(--success-light)',
+              color: 'var(--success-text)',
+              borderRadius: 'var(--radius-md)',
+              marginBottom: '20px',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              border: '1px solid #A7F3D0',
+            }}
+          >
+            <CheckCircle2 size={16} /> {successInfo}
+          </div>
+        )}
+
+        {/* Error Alert */}
         {error && (
           <div
             style={{
@@ -181,6 +217,7 @@ const Login = () => {
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
+              border: '1px solid #FECACA',
             }}
           >
             <AlertCircle size={16} /> {error}
@@ -239,7 +276,34 @@ const Login = () => {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '24px', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+        {/* Signup / Register Link */}
+        <div
+          style={{
+            textAlign: 'center',
+            marginTop: '22px',
+            paddingTop: '18px',
+            borderTop: '1px solid var(--border-color)',
+            fontSize: '0.875rem',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Don't have an account?{' '}
+          <Link
+            to="/register"
+            style={{
+              color: 'var(--primary)',
+              fontWeight: 700,
+              textDecoration: 'none',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            Sign Up
+          </Link>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
           Secure Self Help Group Portal • Bachat Gat 2026
         </div>
       </div>

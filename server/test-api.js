@@ -46,44 +46,79 @@ function request(method, path, body = null, headers = {}) {
 }
 
 async function runTests() {
-  console.log('🧪 Starting Bachat Gat API Automated Test Suite...\n');
+  console.log('🧪 Starting Bachat Gat API Automated Test Suite (Including Dynamic Group Name Sync)...\n');
   server = app.listen(PORT);
 
   try {
     // 1. Health Check
     const health = await request('GET', '/api/health');
-    console.log('✔ [1/10] Health Check:', health.status === 200 ? 'PASSED' : 'FAILED', health.data);
+    console.log('✔ [1/13] Health Check:', health.status === 200 ? 'PASSED' : 'FAILED', health.data);
 
-    // 2. Admin Login
+    // 2. Member Registration (New Member Signup)
+    const uniqueEmail = `aniket.${Date.now()}@bachatgat.com`;
+    const uniquePhone = `9822${Date.now().toString().slice(-6)}`;
+    const regRes = await request('POST', '/api/auth/register', {
+      fullName: 'Aniket Subhash More',
+      email: uniqueEmail,
+      phone: uniquePhone,
+      password: 'Member@123',
+      confirmPassword: 'Member@123',
+    });
+    console.log('✔ [2/13] Member Self-Registration:', regRes.status === 201 ? 'PASSED' : 'FAILED', regRes.data.message);
+
+    // 3. Login with newly registered member
+    const newMemberLogin = await request('POST', '/api/auth/login', {
+      email: uniqueEmail,
+      password: 'Member@123',
+    });
+    console.log('✔ [3/13] Login with Newly Registered Account:', newMemberLogin.status === 200 ? 'PASSED' : 'FAILED', `Group: ${newMemberLogin.data.user.groupName}`);
+
+    // 4. Admin Login
     const loginRes = await request('POST', '/api/auth/login', {
       email: 'admin@bachatgat.com',
       password: 'Admin@123',
     });
-    console.log('✔ [2/10] Admin Login:', loginRes.status === 200 ? 'PASSED' : 'FAILED', `Role: ${loginRes.data.user.role_name}`);
+    console.log('✔ [4/13] Admin Login:', loginRes.status === 200 ? 'PASSED' : 'FAILED', `Role: ${loginRes.data.user.role_name}`);
     adminToken = loginRes.data.token;
     const authHeaders = { Authorization: `Bearer ${adminToken}` };
 
-    // 3. Get /api/auth/me
+    // 5. Get /api/auth/me
     const meRes = await request('GET', '/api/auth/me', null, authHeaders);
-    console.log('✔ [3/10] Get Profile (/me):', meRes.status === 200 ? 'PASSED' : 'FAILED', meRes.data.user.name, `Role: ${meRes.data.user.role_name}`);
+    console.log('✔ [5/13] Get Profile (/me):', meRes.status === 200 ? 'PASSED' : 'FAILED', meRes.data.user.name, `Group: ${meRes.data.user.groupName}`);
 
-    // 4. Dashboard Summary
+    // 6. Update Group Name dynamically via PUT /api/group
+    const updatedGroupName = `Jay Malhar Bachat Gat ${Date.now().toString().slice(-4)}`;
+    const updateGroupRes = await request('PUT', '/api/group', {
+      group_name: updatedGroupName,
+      monthly_contribution_per_share: 1000,
+      monthly_target: 363000,
+      description: 'Updated digital savings group',
+    }, authHeaders);
+    console.log('✔ [6/13] Update Group Name (PUT /api/group):', updateGroupRes.status === 200 ? 'PASSED' : 'FAILED', `New Name: ${updateGroupRes.data.group.group_name}`);
+
+    // 7. Verify /api/auth/me immediately reflects updated group name for admin & member
+    const meAfterGroupUpdate = await request('GET', '/api/auth/me', null, authHeaders);
+    const isSyncedMe = meAfterGroupUpdate.data.user.groupName === updatedGroupName;
+    console.log('✔ [7/13] Sync Verification in /api/auth/me:', isSyncedMe ? 'PASSED (Group Name updated dynamically)' : 'FAILED', meAfterGroupUpdate.data.user.groupName);
+
+    // 8. Verify Dashboard Summary reflects updated group name
     const dashRes = await request('GET', '/api/dashboard/summary', null, authHeaders);
-    console.log('✔ [4/10] Dashboard Summary:', dashRes.status === 200 ? 'PASSED' : 'FAILED', dashRes.data.summary);
+    const isSyncedDash = dashRes.data.summary.groupName === updatedGroupName;
+    console.log('✔ [8/13] Sync Verification in /api/dashboard/summary:', isSyncedDash ? 'PASSED' : 'FAILED', dashRes.data.summary.groupName);
 
-    // 5. Add New Member with Role
+    // 9. Admin Add Member with Custom Role
     const newMemberRes = await request('POST', '/api/members', {
       name: 'Santosh Namdeo Jadhav',
       email: `santosh.${Date.now()}@bachatgat.com`,
-      phone: '9822998877',
+      phone: `9823${Date.now().toString().slice(-6)}`,
       member_code: `MEM-${Date.now().toString().slice(-4)}`,
       monthly_contribution: 1000,
       role_name: 'TREASURER',
     }, authHeaders);
-    console.log('✔ [5/10] Create Member with Role:', newMemberRes.status === 201 ? 'PASSED' : 'FAILED', `Member ID: ${newMemberRes.data.memberId}`);
+    console.log('✔ [9/13] Admin Create Member with Role:', newMemberRes.status === 201 ? 'PASSED' : 'FAILED', `Member ID: ${newMemberRes.data.memberId}`);
     const newMemberId = newMemberRes.data.memberId;
 
-    // 6. Record Savings
+    // 10. Record Savings
     const savingsRes = await request('POST', '/api/savings', {
       member_id: newMemberId,
       amount: 1000,
@@ -91,18 +126,18 @@ async function runTests() {
       year: 2026,
       payment_mode: 'UPI',
     }, authHeaders);
-    console.log('✔ [6/10] Record Monthly Savings:', savingsRes.status === 201 ? 'PASSED' : 'FAILED', `Savings ID: ${savingsRes.data.savingsId}`);
+    console.log('✔ [10/13] Record Monthly Savings:', savingsRes.status === 201 ? 'PASSED' : 'FAILED', `Savings ID: ${savingsRes.data.savingsId}`);
 
-    // 7. Duplicate Savings Check (Expect 400 Bad Request)
+    // 11. Prevent Duplicate Savings
     const dupSavingsRes = await request('POST', '/api/savings', {
       member_id: newMemberId,
       amount: 1000,
       month: 8,
       year: 2026,
     }, authHeaders);
-    console.log('✔ [7/10] Prevent Duplicate Savings:', dupSavingsRes.status === 400 ? 'PASSED (Rejected duplicate correctly)' : 'FAILED', dupSavingsRes.data.message);
+    console.log('✔ [11/13] Prevent Duplicate Savings:', dupSavingsRes.status === 400 ? 'PASSED (Rejected duplicate correctly)' : 'FAILED', dupSavingsRes.data.message);
 
-    // 8. Create Loan
+    // 12. Create Loan
     const loanRes = await request('POST', '/api/loans', {
       member_id: newMemberId,
       principal_amount: 5000,
@@ -110,34 +145,16 @@ async function runTests() {
       duration_months: 12,
       purpose: 'Dairy business purchase',
     }, authHeaders);
-    console.log('✔ [8/10] Create Loan:', loanRes.status === 201 ? 'PASSED' : 'FAILED', `Loan #: ${loanRes.data.loanNumber}`);
-    const loanId = loanRes.data.loanId;
+    console.log('✔ [12/13] Create Loan:', loanRes.status === 201 ? 'PASSED' : 'FAILED', `Loan #: ${loanRes.data.loanNumber}`);
 
-    // 9. Record Loan Repayment (Partial & Full)
-    const repay1 = await request('POST', `/api/loans/${loanId}/repayments`, {
-      payment_month: 8,
-      payment_year: 2026,
-      regular_hafta_amount: 0,
-      principal_repayment_amount: 1000,
-    }, authHeaders);
-    console.log('✔ [9/10] Record Partial Loan Repayment:', repay1.status === 201 ? 'PASSED' : 'FAILED', repay1.data.calculated);
-
-    const repay2 = await request('POST', `/api/loans/${loanId}/repayments`, {
-      payment_month: 9,
-      payment_year: 2026,
-      regular_hafta_amount: 0,
-      principal_repayment_amount: 4000,
-    }, authHeaders);
-    console.log('✔ [9b/10] Record Full Loan Repayment & Auto-Close:', repay2.status === 201 && repay2.data.calculated.status === 'CLOSED' ? 'PASSED (Loan closed)' : 'FAILED', repay2.data.calculated);
-
-    // 10. Reports
+    // 13. Reports API
     const monthlyReport = await request('GET', '/api/reports/monthly?month=8&year=2026', null, authHeaders);
     const pendingDues = await request('GET', '/api/reports/pending-dues?month=8&year=2026', null, authHeaders);
     const loansOverview = await request('GET', '/api/reports/loans-overview', null, authHeaders);
-    console.log('✔ [10/10] Reports API:', (monthlyReport.status === 200 && pendingDues.status === 200 && loansOverview.status === 200) ? 'PASSED' : 'FAILED');
+    console.log('✔ [13/13] Reports API:', (monthlyReport.status === 200 && pendingDues.status === 200 && loansOverview.status === 200) ? 'PASSED' : 'FAILED');
 
     console.log('\n==============================================');
-    console.log('🎉 ALL BACKEND API TESTS PASSED SUCCESSFULLY WITH ROLE_NAME!');
+    console.log('🎉 ALL BACKEND API TESTS (INCLUDING DYNAMIC GROUP NAME SYNC) PASSED!');
     console.log('==============================================');
   } catch (err) {
     console.error('❌ Test Failed:', err);

@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 
 const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) => {
-  const { user, logout, roleName, canManageSavings, canManageLoans, canManageGroup } = useAuth();
+  const { user, groupName, logout, roleName, canManageSavings, canManageLoans, canManageGroup } = useAuth();
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -135,7 +135,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                 }}
                 title="View Group Information"
               >
-                <Building2 size={12} /> {user?.groupName || 'Chhatrapati Bachat Gat'}
+                <Building2 size={12} /> {groupName || user?.groupName || 'Bachat Gat'}
               </button>
             </div>
           </div>

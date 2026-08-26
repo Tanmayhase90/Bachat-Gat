@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { groupService } from '../services/dashboardService';
 import { authService } from '../services/authService';
@@ -15,7 +16,9 @@ import {
 } from 'lucide-react';
 
 const Settings = () => {
-  const { user, refreshUser, isAdmin } = useAuth();
+  const { user, refreshUser, updateGroupName, isAdmin } = useAuth();
+  const outletContext = useOutletContext();
+  const triggerRefresh = outletContext?.triggerRefresh;
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('group'); // 'group' | 'profile'
 
@@ -76,8 +79,12 @@ const Settings = () => {
       });
 
       if (res.success) {
-        setMessage({ type: 'success', text: 'Group settings updated successfully!' });
+        if (res.group && res.group.group_name) {
+          updateGroupName(res.group.group_name);
+        }
         await refreshUser();
+        if (triggerRefresh) triggerRefresh();
+        setMessage({ type: 'success', text: 'Group settings updated successfully!' });
       }
     } catch (err) {
       setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to update group settings.' });

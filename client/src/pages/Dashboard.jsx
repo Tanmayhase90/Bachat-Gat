@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const Dashboard = () => {
-  const { user, isAdmin, isMember } = useAuth();
+  const { user, groupName, isAdmin, isMember } = useAuth();
   const navigate = useNavigate();
   const { refreshTrigger, openAddMember, openRecordSavings, openCreateLoan, openRecordRepayment } = useOutletContext();
 
@@ -104,7 +104,7 @@ const Dashboard = () => {
       >
         <div>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'rgba(255, 255, 255, 0.2)', padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.04em', marginBottom: '8px' }}>
-            <ShieldCheck size={14} /> CHHATRAPATI BACHAT GAT
+            <ShieldCheck size={14} /> {(groupName || user?.groupName || summary?.groupName || 'BACHAT GAT').toUpperCase()}
           </div>
           <h1 style={{ color: '#FFFFFF', fontSize: '2.25rem', fontWeight: 800, marginBottom: '4px' }}>
             ₹{summary ? summary.totalGroupFund.toLocaleString('en-IN') : '0'}

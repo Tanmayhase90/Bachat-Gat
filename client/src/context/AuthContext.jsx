@@ -4,11 +4,29 @@ import { authService } from '../services/authService';
 const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bachat_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [groupName, setGroupName] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bachat_user');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return parsed?.groupName || '';
+    } catch (e) {
+      return '';
+    }
+  });
+
   const [token, setToken] = useState(localStorage.getItem('bachat_token') || null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize auth state
+  // Initialize auth state from server
   useEffect(() => {
     const initAuth = async () => {
       const storedToken = localStorage.getItem('bachat_token');
@@ -17,6 +35,10 @@ export const AuthProvider = ({ children }) => {
           const data = await authService.getMe();
           if (data.success && data.user) {
             setUser(data.user);
+            if (data.user.groupName) {
+              setGroupName(data.user.groupName);
+            }
+            localStorage.setItem('bachat_user', JSON.stringify(data.user));
           } else {
             logout();
           }
@@ -38,6 +60,9 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('bachat_user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
+      if (data.user.groupName) {
+        setGroupName(data.user.groupName);
+      }
       return data.user;
     }
     throw new Error(data.message || 'Login failed');
@@ -48,6 +73,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('bachat_user');
     setToken(null);
     setUser(null);
+    setGroupName('');
   };
 
   const refreshUser = async () => {
@@ -55,10 +81,26 @@ export const AuthProvider = ({ children }) => {
       const data = await authService.getMe();
       if (data.success && data.user) {
         setUser(data.user);
+        if (data.user.groupName) {
+          setGroupName(data.user.groupName);
+        }
+        localStorage.setItem('bachat_user', JSON.stringify(data.user));
+        return data.user;
       }
     } catch (err) {
       console.error('Failed to refresh user:', err);
     }
+  };
+
+  const updateGroupName = (newGroupName) => {
+    if (!newGroupName) return;
+    setGroupName(newGroupName);
+    setUser((prev) => {
+      if (!prev) return prev;
+      const updated = { ...prev, groupName: newGroupName };
+      localStorage.setItem('bachat_user', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const roleName = (user?.role_name || user?.role || 'MEMBER').toUpperCase();
@@ -75,11 +117,13 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     user,
+    groupName: groupName || user?.groupName || 'Bachat Gat',
     token,
     loading,
     login,
     logout,
     refreshUser,
+    updateGroupName,
     isAuthenticated: !!token && !!user,
     roleName,
     isAdmin,

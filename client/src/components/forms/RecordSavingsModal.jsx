@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { memberService } from '../../services/memberService';
 import { savingsService } from '../../services/savingsService';
+import { formatCurrency } from '../../utils/formatters';
 import { CheckCircle2, AlertCircle, PiggyBank } from 'lucide-react';
 
 const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null }) => {
@@ -47,7 +48,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
     setFormData((prev) => {
       const updated = { ...prev, [name]: value };
       if (name === 'member_id') {
-        const selected = members.find((m) => m.member_id === parseInt(value, 10));
+        const selected = members.find((m) => String(m.member_id) === String(value) || String(m.id) === String(value));
         if (selected) {
           updated.amount = selected.monthly_contribution.toString();
         }
@@ -124,7 +125,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
             <option value="">-- Choose Member --</option>
             {members.map((m) => (
               <option key={m.member_id} value={m.member_id}>
-                {m.name} ({m.member_code}) - Share: ₹{m.monthly_contribution}
+                {m.name} ({m.member_code}) - Share: {formatCurrency(m.monthly_contribution || m.monthlyContribution)}
               </option>
             ))}
           </select>

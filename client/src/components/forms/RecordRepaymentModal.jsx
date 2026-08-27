@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { loanService } from '../../services/loanService';
+import { formatCurrency } from '../../utils/formatters';
 import { CreditCard, AlertCircle, CheckCircle2, Calculator, Info } from 'lucide-react';
 
 const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null }) => {
@@ -72,7 +73,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
     }
 
     if (principalRepay > currentOutstanding) {
-      setError(`Principal repayment (₹${principalRepay}) cannot exceed outstanding amount (₹${currentOutstanding}).`);
+      setError(`Principal repayment (${formatCurrency(principalRepay)}) cannot exceed outstanding amount (${formatCurrency(currentOutstanding)}).`);
       return;
     }
 
@@ -84,7 +85,9 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
     try {
       setLoading(true);
       setError('');
-      const res = await loanService.recordRepayment(formData.loan_id, {
+      const res = await loanService.recordRepayment({
+        loan_id: formData.loan_id,
+        loanId: formData.loan_id,
         payment_month: parseInt(formData.payment_month, 10),
         payment_year: parseInt(formData.payment_year, 10),
         regular_hafta_amount: regularHafta,
@@ -103,7 +106,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
         }, 1300);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to record loan payment.');
+      setError(err.response?.data?.message || err.message || 'Failed to record loan payment.');
     } finally {
       setLoading(false);
     }
@@ -144,7 +147,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
             <option value="">-- Select Active Loan --</option>
             {activeLoans.map((l) => (
               <option key={l.id} value={l.id}>
-                {l.member_name} ({l.member_code}) — {l.loan_number} | Outstanding: ₹{l.outstanding_amount} (@ {l.interest_rate}%/mo)
+                {l.member_name} ({l.member_code}) — {l.loan_number} | Outstanding: {formatCurrency(l.outstanding_amount)} (@ {l.interest_rate}%/mo)
               </option>
             ))}
           </select>
@@ -166,11 +169,11 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
           >
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>ORIGINAL LOAN</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>₹{selectedLoan.principal_amount}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{formatCurrency(selectedLoan.principal_amount)}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>OUTSTANDING</div>
-              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary)' }}>₹{currentOutstanding}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(currentOutstanding)}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>MONTHLY RATE</div>
@@ -262,28 +265,28 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.875rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ color: 'var(--text-secondary)' }}>Calculated Monthly Interest ({interestRate}% of ₹{currentOutstanding}):</span>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{calculatedInterest.toFixed(2)}</span>
+              <span style={{ color: 'var(--text-secondary)' }}>Calculated Monthly Interest ({interestRate}% of {formatCurrency(currentOutstanding)}):</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(calculatedInterest)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)' }}>Principal Repayment:</span>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{principalRepay.toFixed(2)}</span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(principalRepay)}</span>
             </div>
             {regularHafta > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-secondary)' }}>Regular Hafta:</span>
-                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>₹{regularHafta.toFixed(2)}</span>
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(regularHafta)}</span>
               </div>
             )}
             <div style={{ height: '1px', background: 'rgba(194, 24, 91, 0.2)', margin: '4px 0' }} />
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800 }}>
               <span style={{ color: 'var(--primary)' }}>Total Payment Collected:</span>
-              <span style={{ color: 'var(--primary)' }}>₹{totalPayment.toFixed(2)}</span>
+              <span style={{ color: 'var(--primary)' }}>{formatCurrency(totalPayment)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
               <span>New Outstanding Balance:</span>
               <span style={{ fontWeight: 700, color: newOutstanding === 0 ? 'var(--success)' : 'var(--text-primary)' }}>
-                ₹{newOutstanding.toFixed(2)} {newOutstanding === 0 && '(Will mark loan as CLOSED)'}
+                {formatCurrency(newOutstanding)} {newOutstanding === 0 && '(Will mark loan as CLOSED)'}
               </span>
             </div>
           </div>

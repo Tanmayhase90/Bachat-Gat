@@ -4,11 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { savingsService } from '../services/savingsService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
+import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
 import { PiggyBank, Search, Plus, Filter, Calendar } from 'lucide-react';
 
 const Savings = () => {
-  const { isAdmin } = useAuth();
-  const { refreshTrigger, openRecordSavings } = useOutletContext();
+  const { user, isAdmin, isMember, canManageSavings } = useAuth();
+  const outletContext = useOutletContext() || {};
+  const { refreshTrigger = 0, openRecordSavings } = outletContext;
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState('');
@@ -25,11 +27,14 @@ const Savings = () => {
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (search) params.search = search;
+      if (isMember && !isAdmin && user?.memberId) {
+        params.memberId = user.memberId;
+      }
 
       const res = await savingsService.getAllSavings(params);
       if (res.success) {
-        setSavingsList(res.savings);
-        setTotalAmount(res.totalAmount);
+        setSavingsList(res.savings || []);
+        setTotalAmount(res.totalAmount || 0);
       }
     } catch (err) {
       console.error('Failed to load savings:', err);
@@ -162,7 +167,7 @@ const Savings = () => {
               gap: '6px',
             }}
           >
-            <span>Total: ₹{totalAmount.toLocaleString('en-IN')}</span>
+            <span>Total: {formatCurrency(totalAmount)}</span>
           </div>
         </div>
       </div>
@@ -171,7 +176,7 @@ const Savings = () => {
       <div className="card" style={{ padding: '0px', overflow: 'hidden' }}>
         {loading ? (
           <Loader text="Loading savings records..." />
-        ) : savingsList.length === 0 ? (
+        ) : (!savingsList || savingsList.length === 0) ? (
           <EmptyState
             icon={PiggyBank}
             title="No savings records found"
@@ -195,20 +200,20 @@ const Savings = () => {
               </thead>
               <tbody>
                 {savingsList.map((s) => (
-                  <tr key={s.id}>
+                  <tr key={s.id || s.saving_id}>
                     <td>
-                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.member_name}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.member_code}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{s.member_name || s.memberName}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.member_code || s.memberCode}</div>
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                      {new Date(s.year, s.month - 1).toLocaleString('default', { month: 'long' })} {s.year}
+                      {formatMonthYear(s.month, s.year)}
                     </td>
                     <td style={{ fontWeight: 800, color: 'var(--success-text)', fontSize: '1rem' }}>
-                      ₹{parseFloat(s.amount).toLocaleString('en-IN')}
+                      {formatCurrency(s.amount)}
                     </td>
-                    <td>{new Date(s.payment_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td>{formatDate(s.payment_date || s.paymentDate)}</td>
                     <td>
-                      <span className="badge badge-info">{s.payment_mode}</span>
+                      <span className="badge badge-info">{s.payment_mode || s.paymentMode || 'UPI'}</span>
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>{s.remarks || '—'}</td>
                     <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.recorded_by_name || 'System'}</td>

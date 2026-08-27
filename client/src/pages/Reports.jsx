@@ -3,6 +3,12 @@ import { reportService } from '../services/dashboardService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import {
+  formatCurrency,
+  formatNumber,
+  formatDate,
+  formatMonthYear,
+} from '../utils/formatters';
+import {
   FileBarChart2,
   Download,
   Printer,
@@ -68,7 +74,7 @@ const Reports = () => {
           keys
             .map((k) => {
               let cell = row[k] === null || row[k] === undefined ? '' : row[k];
-              cell = cell instanceof Date ? cell.toLocaleString() : cell.toString().replace(/"/g, '""');
+              cell = typeof cell === 'object' ? JSON.stringify(cell) : String(cell).replace(/"/g, '""');
               if (cell.search(/("|,|\n)/g) >= 0) cell = `"${cell}"`;
               return cell;
             })
@@ -87,37 +93,40 @@ const Reports = () => {
 
   const handleExport = () => {
     if (activeTab === 'monthly' && monthlyData) {
-      const exportList = monthlyData.savingsTransactions.map((s) => ({
+      const list = monthlyData.savingsTransactions || monthlyData.collections || [];
+      const exportList = list.map((s) => ({
         Type: 'Savings',
-        Member: s.member_name,
-        MemberCode: s.member_code,
-        Amount: s.amount,
+        Member: s.member_name || s.memberName,
+        MemberCode: s.member_code || s.memberCode,
+        Amount: s.amount || s.paid_amount,
         Month: s.month,
         Year: s.year,
-        Date: s.payment_date,
-        Mode: s.payment_mode,
+        Date: s.payment_date || s.paymentDate,
+        Mode: s.payment_mode || s.paymentMode,
       }));
       exportToCSV(`Monthly_Report_${selectedMonth}_${selectedYear}`, exportList);
     } else if (activeTab === 'pending' && pendingData) {
-      const exportList = pendingData.duesList.map((d) => ({
-        Member: d.memberName,
-        Code: d.memberCode,
-        PendingHafta: d.pendingHafta,
+      const list = pendingData.duesList || pendingData.pendingMembers || [];
+      const exportList = list.map((d) => ({
+        Member: d.memberName || d.member_name,
+        Code: d.memberCode || d.member_code,
+        PendingHafta: d.pendingHafta || d.monthly_contribution,
         OutstandingPrincipal: d.outstandingPrincipal,
         PendingInterest: d.pendingInterest,
-        TotalPending: d.totalPending,
+        TotalPending: d.totalPending || d.due_amount,
       }));
       exportToCSV(`Pending_Dues_${selectedMonth}_${selectedYear}`, exportList);
     } else if (activeTab === 'loans' && loansData) {
-      const exportList = loansData.loans.map((l) => ({
-        LoanNumber: l.loan_number,
-        Member: l.member_name,
-        Code: l.member_code,
-        OriginalLoan: l.principal_amount,
-        InterestRate: l.interest_rate,
+      const list = loansData.loans || [];
+      const exportList = list.map((l) => ({
+        LoanNumber: l.loan_number || l.loanNumber,
+        Member: l.member_name || l.memberName,
+        Code: l.member_code || l.memberCode,
+        OriginalLoan: l.principal_amount || l.principalAmount,
+        InterestRate: l.interest_rate || l.interestRate,
         PrincipalPaid: l.total_principal_paid,
         InterestPaid: l.total_interest_paid,
-        Outstanding: l.outstanding_amount,
+        Outstanding: l.outstanding_amount || l.outstandingAmount,
         Status: l.status,
       }));
       exportToCSV('Loans_Overview_Report', exportList);
@@ -255,7 +264,7 @@ const Reports = () => {
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL SAVINGS (MONTH)</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
-                    ₹{monthlyData.summary.monthSavings.toLocaleString('en-IN')}
+                    {formatCurrency(monthlyData.summary?.monthSavings ?? monthlyData.summary?.totalSavingsCollected)}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Collected in {months.find(m => m.value === selectedMonth)?.label}</span>
                 </div>
@@ -263,7 +272,7 @@ const Reports = () => {
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL INTEREST (MONTH)</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
-                    ₹{monthlyData.summary.monthInterest.toLocaleString('en-IN')}
+                    {formatCurrency(monthlyData.summary?.monthInterest ?? monthlyData.summary?.totalInterestCollected)}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>From loan repayments</span>
                 </div>
@@ -271,7 +280,7 @@ const Reports = () => {
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>OUTSTANDING PRINCIPAL</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>
-                    ₹{monthlyData.summary.outstandingPrincipal.toLocaleString('en-IN')}
+                    {formatCurrency(monthlyData.summary?.outstandingPrincipal)}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Active loan balance</span>
                 </div>
@@ -279,7 +288,7 @@ const Reports = () => {
                 <div className="card" style={{ padding: '18px', borderColor: 'var(--success)', background: 'linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%)' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>AVAILABLE GROUP BALANCE</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
-                    ₹{monthlyData.summary.availableGroupBalance.toLocaleString('en-IN')}
+                    {formatCurrency(monthlyData.summary?.availableGroupBalance)}
                   </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Net liquid cash in fund</span>
                 </div>
@@ -288,7 +297,7 @@ const Reports = () => {
               {/* Monthly Savings Transactions Table */}
               <div className="card">
                 <h3 style={{ fontSize: '1.15rem', marginBottom: '14px' }}>Monthly Savings Transactions</h3>
-                {monthlyData.savingsTransactions.length === 0 ? (
+                {(!monthlyData.savingsTransactions || monthlyData.savingsTransactions.length === 0) ? (
                   <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                     No savings recorded for this selected month.
                   </div>
@@ -306,12 +315,12 @@ const Reports = () => {
                       </thead>
                       <tbody>
                         {monthlyData.savingsTransactions.map((s) => (
-                          <tr key={s.id}>
-                            <td style={{ fontWeight: 700 }}>{s.member_name}</td>
-                            <td>{s.member_code}</td>
-                            <td style={{ fontWeight: 800, color: 'var(--success-text)' }}>₹{parseFloat(s.amount).toLocaleString('en-IN')}</td>
-                            <td>{new Date(s.payment_date).toLocaleDateString('en-IN')}</td>
-                            <td><span className="badge badge-info">{s.payment_mode}</span></td>
+                          <tr key={s.id || s.member_id}>
+                            <td style={{ fontWeight: 700 }}>{s.member_name || s.memberName}</td>
+                            <td>{s.member_code || s.memberCode}</td>
+                            <td style={{ fontWeight: 800, color: 'var(--success-text)' }}>{formatCurrency(s.amount || s.paid_amount)}</td>
+                            <td>{formatDate(s.payment_date || s.paymentDate)}</td>
+                            <td><span className="badge badge-info">{s.payment_mode || s.paymentMode || 'UPI'}</span></td>
                           </tr>
                         ))}
                       </tbody>
@@ -341,7 +350,7 @@ const Reports = () => {
               >
                 <div>
                   <h3 style={{ color: 'var(--danger-text)', fontSize: '1.1rem', fontWeight: 800 }}>
-                    {pendingData.summary.totalPendingMembers} Member(s) have pending balances
+                    {formatNumber(pendingData.summary?.totalPendingMembers ?? pendingData.count)} Member(s) have pending balances
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
                     For period {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
@@ -350,14 +359,14 @@ const Reports = () => {
                 <div style={{ textAlign: 'right' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger-text)' }}>TOTAL PENDING DUES</span>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--danger-text)' }}>
-                    ₹{pendingData.summary.totalPendingAmount.toLocaleString('en-IN')}
+                    {formatCurrency(pendingData.summary?.totalPendingAmount ?? pendingData.totalPendingAmount)}
                   </div>
                 </div>
               </div>
 
               {/* Dues Table */}
               <div className="card">
-                {pendingData.duesList.length === 0 ? (
+                {(!pendingData.duesList || pendingData.duesList.length === 0) ? (
                   <EmptyState
                     icon={CheckCircle2}
                     title="All dues cleared!"
@@ -377,22 +386,22 @@ const Reports = () => {
                       </thead>
                       <tbody>
                         {pendingData.duesList.map((d) => (
-                          <tr key={d.memberId}>
+                          <tr key={d.memberId || d.member_id || d.memberName}>
                             <td>
-                              <div style={{ fontWeight: 700 }}>{d.memberName}</div>
-                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{d.memberCode} • {d.memberPhone || 'No Phone'}</div>
+                              <div style={{ fontWeight: 700 }}>{d.memberName || d.member_name}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{d.memberCode || d.member_code} • {d.memberPhone || d.phone || 'No Phone'}</div>
                             </td>
-                            <td style={{ fontWeight: 600, color: d.pendingHafta > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
-                              ₹{d.pendingHafta.toLocaleString('en-IN')}
+                            <td style={{ fontWeight: 600, color: (d.pendingHafta || d.monthly_contribution) > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
+                              {formatCurrency(d.pendingHafta || d.monthly_contribution)}
                             </td>
-                            <td style={{ fontWeight: 600, color: d.outstandingPrincipal > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
-                              ₹{d.outstandingPrincipal.toLocaleString('en-IN')}
+                            <td style={{ fontWeight: 600, color: (d.outstandingPrincipal || 0) > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
+                              {formatCurrency(d.outstandingPrincipal)}
                             </td>
-                            <td style={{ fontWeight: 600, color: d.pendingInterest > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
-                              ₹{d.pendingInterest.toFixed(2)} ({d.interestRate}%)
+                            <td style={{ fontWeight: 600, color: (d.pendingInterest || 0) > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
+                              {formatCurrency(d.pendingInterest)} ({d.interestRate || 2}%)
                             </td>
                             <td style={{ fontWeight: 800, color: 'var(--danger-text)', fontSize: '1rem' }}>
-                              ₹{d.totalPending.toLocaleString('en-IN')}
+                              {formatCurrency(d.totalPending || d.due_amount)}
                             </td>
                           </tr>
                         ))}
@@ -411,70 +420,86 @@ const Reports = () => {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL DISBURSED</span>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '4px' }}>₹{loansData.summary.totalPrincipalDisbursed.toLocaleString('en-IN')}</div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Across {loansData.summary.totalLoans} loan(s)</span>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '4px' }}>
+                    {formatCurrency(loansData.summary?.totalPrincipalDisbursed)}
+                  </div>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Across {formatNumber(loansData.summary?.totalLoans ?? loansData.summary?.totalLoansCount)} loan(s)</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>PRINCIPAL COLLECTED</span>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>₹{loansData.summary.totalPrincipalCollected.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
+                    {formatCurrency(loansData.summary?.totalPrincipalCollected ?? loansData.summary?.totalPrincipalRecovered)}
+                  </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Recovered principal</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>INTEREST EARNED</span>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>₹{loansData.summary.totalInterestCollected.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
+                    {formatCurrency(loansData.summary?.totalInterestCollected ?? loansData.summary?.totalInterestEarned)}
+                  </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cumulative interest</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>REMAINING OUTSTANDING</span>
-                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>₹{loansData.summary.totalOutstanding.toLocaleString('en-IN')}</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>
+                    {formatCurrency(loansData.summary?.totalOutstanding)}
+                  </div>
                   <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Active loan balance</span>
                 </div>
               </div>
 
               {/* Table */}
               <div className="card">
-                <div className="table-responsive">
-                  <table className="custom-table">
-                    <thead>
-                      <tr>
-                        <th>Loan #</th>
-                        <th>Member</th>
-                        <th>Original Loan</th>
-                        <th>Principal Paid</th>
-                        <th>Interest Paid</th>
-                        <th>Outstanding</th>
-                        <th>Repayments</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loansData.loans.map((l) => (
-                        <tr key={l.id}>
-                          <td style={{ fontWeight: 700 }}>{l.loan_number}</td>
-                          <td>
-                            <div style={{ fontWeight: 600 }}>{l.member_name}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{l.member_code}</div>
-                          </td>
-                          <td style={{ fontWeight: 700 }}>₹{l.principal_amount.toLocaleString('en-IN')}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--success-text)' }}>₹{l.total_principal_paid.toLocaleString('en-IN')}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--primary)' }}>₹{l.total_interest_paid.toLocaleString('en-IN')}</td>
-                          <td style={{ fontWeight: 800, color: l.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--text-muted)' }}>
-                            ₹{l.outstanding_amount.toLocaleString('en-IN')}
-                          </td>
-                          <td>{l.repayments_count} installments</td>
-                          <td>
-                            <span className={`badge ${l.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`}>
-                              {l.status}
-                            </span>
-                          </td>
+                {(!loansData.loans || loansData.loans.length === 0) ? (
+                  <EmptyState
+                    icon={HandCoins}
+                    title="No loans found"
+                    description="There are currently no loans recorded in the system."
+                  />
+                ) : (
+                  <div className="table-responsive">
+                    <table className="custom-table">
+                      <thead>
+                        <tr>
+                          <th>Loan #</th>
+                          <th>Member</th>
+                          <th>Original Loan</th>
+                          <th>Principal Paid</th>
+                          <th>Interest Paid</th>
+                          <th>Outstanding</th>
+                          <th>Repayments</th>
+                          <th>Status</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {loansData.loans.map((l) => (
+                          <tr key={l.id || l.loan_id}>
+                            <td style={{ fontWeight: 700 }}>{l.loan_number || l.loanNumber}</td>
+                            <td>
+                              <div style={{ fontWeight: 600 }}>{l.member_name || l.memberName}</div>
+                              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{l.member_code || l.memberCode}</div>
+                            </td>
+                            <td style={{ fontWeight: 700 }}>{formatCurrency(l.principal_amount || l.principalAmount)}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--success-text)' }}>{formatCurrency(l.total_principal_paid)}</td>
+                            <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(l.total_interest_paid)}</td>
+                            <td style={{ fontWeight: 800, color: l.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--text-muted)' }}>
+                              {formatCurrency(l.outstanding_amount || l.outstandingAmount)}
+                            </td>
+                            <td>{formatNumber(l.repayments_count)} installments</td>
+                            <td>
+                              <span className={`badge ${l.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`}>
+                                {l.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}

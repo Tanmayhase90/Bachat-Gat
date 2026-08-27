@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { memberService } from '../services/memberService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
+import { formatCurrency, formatDate, formatNumber } from '../utils/formatters';
 import {
   Users,
   Search,
@@ -19,7 +20,8 @@ import {
 const Members = () => {
   const { canManageMembers } = useAuth();
   const navigate = useNavigate();
-  const { refreshTrigger, openAddMember } = useOutletContext();
+  const outletContext = useOutletContext() || {};
+  const { refreshTrigger = 0, openAddMember } = outletContext;
 
   const [members, setMembers] = useState([]);
   const [activeTab, setActiveTab] = useState('all'); // 'all' | 'pending'
@@ -31,7 +33,7 @@ const Members = () => {
       setLoading(true);
       const res = await memberService.getAllMembers({ search });
       if (res.success) {
-        setMembers(res.members);
+        setMembers(res.members || []);
       }
     } catch (err) {
       console.error('Failed to load members:', err);
@@ -216,7 +218,7 @@ const Members = () => {
                       {m.is_pending_dues ? 'Current Dues' : 'Monthly Share'}
                     </span>
                     <div style={{ fontSize: '1.15rem', fontWeight: 800, color: m.is_pending_dues ? 'var(--danger-text)' : 'var(--text-primary)' }}>
-                      ₹{m.is_pending_dues ? m.pending_amount.toLocaleString('en-IN') : m.monthly_contribution.toLocaleString('en-IN')}
+                      {formatCurrency(m.is_pending_dues ? m.pending_amount : (m.monthly_contribution || m.monthlyContribution))}
                     </div>
                   </div>
 
@@ -246,12 +248,12 @@ const Members = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.825rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                     <PiggyBank size={15} color="var(--primary)" />
-                    <span>Total: ₹{m.total_savings.toLocaleString('en-IN')}</span>
+                    <span>Total: {formatCurrency(m.total_savings || m.totalSavings)}</span>
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                     <HandCoins size={15} color="var(--warning)" />
-                    <span>Loans: ₹{m.outstanding_loans.toLocaleString('en-IN')}</span>
+                    <span>Loans: {formatCurrency(m.outstanding_loans || m.activeLoanAmount)}</span>
                   </div>
                 </div>
               </div>

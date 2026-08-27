@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { Building2, Calendar, Target, Users, ShieldCheck, Tag } from 'lucide-react';
 import { groupService } from '../../services/dashboardService';
+import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
 
 const GroupInfoModal = ({ isOpen, onClose }) => {
   const [group, setGroup] = useState(null);
@@ -60,9 +61,11 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
               BG
             </div>
             <div>
-              <h3 style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 700 }}>{group.group_name}</h3>
+              <h3 style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 700 }}>
+                {group.group_name || group.groupName || 'Chhatrapati Bachat Gat'}
+              </h3>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Tag size={12} /> ID: <code style={{ fontWeight: 600 }}>{group.group_code}</code>
+                <Tag size={12} /> ID: <code style={{ fontWeight: 600 }}>{group.group_code || group.groupCode || 'group_001'}</code>
               </div>
             </div>
           </div>
@@ -73,7 +76,7 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 <ShieldCheck size={14} color="var(--primary)" /> MONTHLY SHARE
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                ₹{parseFloat(group.monthly_contribution_per_share).toLocaleString('en-IN')}
+                {formatCurrency(group.monthly_contribution_per_share || group.monthlyContribution || 1000)}
               </div>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>per share / member</span>
             </div>
@@ -83,7 +86,7 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 <Target size={14} color="var(--success)" /> MONTHLY TARGET
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                ₹{parseFloat(group.monthly_target).toLocaleString('en-IN')}
+                {formatCurrency(group.monthly_target || group.monthlyTarget || 363000)}
               </div>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>group goal</span>
             </div>
@@ -93,9 +96,9 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 <Users size={14} color="var(--info)" /> TOTAL MEMBERS
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                {group.total_active_members} Active
+                {formatNumber(group.total_active_members || group.totalActiveMembers)} Active
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>out of {group.total_members} registered</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>out of {formatNumber(group.total_members || group.totalMembers)} registered</span>
             </div>
 
             <div className="card" style={{ padding: '14px' }}>
@@ -103,9 +106,9 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 <Calendar size={14} color="var(--warning)" /> CREATED DATE
               </div>
               <div style={{ fontSize: '0.95rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                {new Date(group.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                {formatDate(group.created_at || group.createdAt)}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Admin: {group.created_by_name || 'System'}</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Admin: {group.created_by_name || group.createdByName || 'Admin'}</span>
             </div>
           </div>
 

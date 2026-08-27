@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if request is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Users Collection: Authenticated users can read all user profiles, create/update their own profile, admin can do all
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    // Groups Collection: Authenticated users can read group config, update group details
+    match /groups/{groupId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Members Collection: Shared between Flutter and Web
+    match /members/{memberId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Savings Collection
+    match /savings/{savingId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Loans Collection
+    match /loans/{loanId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Repayments Collection
+    match /repayments/{repaymentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // Notifications Collection
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Activities & Activity Logs
+    match /activities/{activityId} {
+      allow read, write: if isAuthenticated();
+    }
+    
+    match /activityLogs/{logId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Info, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { notificationService } from '../../services/dashboardService';
+import { formatDate } from '../../utils/formatters';
 
 const NotificationDropdown = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -194,7 +195,7 @@ const NotificationDropdown = () => {
                       {n.message}
                     </div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-                      {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
+                      {formatDate(n.created_at, { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
                     </div>
                   </div>
                 </div>

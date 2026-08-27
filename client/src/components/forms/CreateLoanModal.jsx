@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { memberService } from '../../services/memberService';
 import { loanService } from '../../services/loanService';
+import { formatCurrency } from '../../utils/formatters';
 import { HandCoins, AlertCircle, CheckCircle2, Calculator } from 'lucide-react';
 
 const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null }) => {
@@ -101,7 +102,7 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
             <option value="">-- Choose Member --</option>
             {members.map((m) => (
               <option key={m.member_id} value={m.member_id}>
-                {m.name} ({m.member_code}) - Savings: ₹{m.total_savings}
+                {m.name} ({m.member_code}) - Savings: {formatCurrency(m.total_savings || m.totalSavings)}
               </option>
             ))}
           </select>
@@ -155,7 +156,7 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
             <Calculator size={16} /> Monthly Interest Calculation:
           </div>
           <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--primary)' }}>
-            ₹{monthlyInterest.toFixed(2)} / month
+            {formatCurrency(monthlyInterest)} / month
           </div>
         </div>
 

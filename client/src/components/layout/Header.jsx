@@ -210,7 +210,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                   letterSpacing: '0.02em',
                 }}
               >
-                {getInitials(user?.name)}
+                {getInitials(user?.fullName || user?.name)}
               </div>
 
               {/* User Name & Role (Stacked Layout) */}
@@ -235,7 +235,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {user?.name || 'User'}
+                  {user?.fullName || user?.name || 'User'}
                 </span>
                 <span
                   style={{

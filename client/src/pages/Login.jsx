@@ -1,32 +1,53 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2, UserPlus } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated, loading: authLoading } = useAuth();
 
-  const [email, setEmail] = useState(location.state?.registeredEmail || 'admin@bachatgat.com');
-  const [password, setPassword] = useState(location.state?.registeredEmail ? '' : 'Admin@123');
+  const [activeTab, setActiveTab] = useState('admin'); // 'admin' | 'member'
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successInfo, setSuccessInfo] = useState(location.state?.message || '');
+  const [successInfo, setSuccessInfo] = useState('');
 
+  // If already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
+
+  // Ensure fields are clean on mount unless redirected from registration
   useEffect(() => {
     if (location.state?.message) {
       setSuccessInfo(location.state.message);
     }
     if (location.state?.registeredEmail) {
       setEmail(location.state.registeredEmail);
+      setActiveTab('member');
+      setPassword('');
+    } else {
+      setEmail('');
       setPassword('');
     }
   }, [location.state]);
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab);
+    setEmail('');
+    setPassword('');
+    setError('');
+    setSuccessInfo('');
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!email || !password) {
+    if (!email.trim() || !password) {
       setError('Please provide both email and password.');
       return;
     }
@@ -35,26 +56,18 @@ const Login = () => {
       setLoading(true);
       setError('');
       setSuccessInfo('');
-      await login(email, password);
+      // Authenticate with Firebase and enforce role based on selected tab ('admin' | 'member')
+      await login(email.trim(), password, activeTab);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || err.message || 'Login failed. Please check credentials.');
+      setError(err.message || 'Login failed. Please check credentials.');
     } finally {
       setLoading(false);
     }
   };
 
-  const setDemoCredentials = (role) => {
-    if (role === 'admin') {
-      setEmail('admin@bachatgat.com');
-      setPassword('Admin@123');
-    } else {
-      setEmail('rahul@bachatgat.com');
-      setPassword('Member@123');
-    }
-    setError('');
-    setSuccessInfo('');
-  };
+  const emailFieldName = activeTab === 'admin' ? 'admin_login_email' : 'member_login_email';
+  const passwordFieldName = activeTab === 'admin' ? 'admin_login_password' : 'member_login_password';
 
   return (
     <div
@@ -137,49 +150,50 @@ const Login = () => {
           </p>
         </div>
 
-        {/* Demo Fast Login Buttons */}
+        {/* Login Role Tabs */}
         <div style={{ marginBottom: '24px' }}>
-          <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.04em' }}>
-            Quick Demo Accounts:
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#F1F5F9', padding: '4px', borderRadius: 'var(--radius-lg)' }}>
             <button
               type="button"
-              onClick={() => setDemoCredentials('admin')}
+              onClick={() => handleTabChange('admin')}
               style={{
-                padding: '8px 12px',
+                padding: '10px 14px',
                 borderRadius: 'var(--radius-md)',
-                background: email === 'admin@bachatgat.com' ? 'var(--accent-soft)' : '#F1F5F9',
-                border: email === 'admin@bachatgat.com' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
-                color: email === 'admin@bachatgat.com' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontSize: '0.8rem',
-                fontWeight: 600,
+                background: activeTab === 'admin' ? '#FFFFFF' : 'transparent',
+                border: activeTab === 'admin' ? '1px solid var(--border-color)' : 'none',
+                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text-secondary)',
+                fontSize: '0.875rem',
+                fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px',
+                gap: '8px',
+                boxShadow: activeTab === 'admin' ? 'var(--shadow-xs)' : 'none',
+                transition: 'var(--transition)',
               }}
             >
-              <ShieldCheck size={15} /> Admin Login
+              <ShieldCheck size={16} /> Admin Login
             </button>
             <button
               type="button"
-              onClick={() => setDemoCredentials('member')}
+              onClick={() => handleTabChange('member')}
               style={{
-                padding: '8px 12px',
+                padding: '10px 14px',
                 borderRadius: 'var(--radius-md)',
-                background: email === 'rahul@bachatgat.com' ? 'var(--accent-soft)' : '#F1F5F9',
-                border: email === 'rahul@bachatgat.com' ? '1.5px solid var(--primary)' : '1px solid var(--border-color)',
-                color: email === 'rahul@bachatgat.com' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontSize: '0.8rem',
-                fontWeight: 600,
+                background: activeTab === 'member' ? '#FFFFFF' : 'transparent',
+                border: activeTab === 'member' ? '1px solid var(--border-color)' : 'none',
+                color: activeTab === 'member' ? 'var(--primary)' : 'var(--text-secondary)',
+                fontSize: '0.875rem',
+                fontWeight: 700,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '6px',
+                gap: '8px',
+                boxShadow: activeTab === 'member' ? 'var(--shadow-xs)' : 'none',
+                transition: 'var(--transition)',
               }}
             >
-              <UserCheck size={15} /> Member Login
+              <UserCheck size={16} /> Member Login
             </button>
           </div>
         </div>
@@ -224,9 +238,15 @@ const Login = () => {
           </div>
         )}
 
-        <form onSubmit={handleLogin}>
+        <form
+          key={`login-form-${activeTab}`}
+          onSubmit={handleLogin}
+          autoComplete="off"
+        >
           <div className="form-group">
-            <label className="form-label">Email or Username</label>
+            <label className="form-label" htmlFor={emailFieldName}>
+              {activeTab === 'admin' ? 'Admin Email' : 'Member Email'}
+            </label>
             <div style={{ position: 'relative' }}>
               <Mail
                 size={18}
@@ -234,10 +254,16 @@ const Login = () => {
                 style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
-                type="text"
+                key={emailFieldName}
+                id={emailFieldName}
+                name={emailFieldName}
+                type="email"
+                autoComplete="off"
+                autoCapitalize="off"
+                spellCheck="false"
                 className="form-input"
                 style={{ paddingLeft: '38px' }}
-                placeholder="name@domain.com"
+                placeholder={activeTab === 'admin' ? 'admin@example.com' : 'member@example.com'}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -246,7 +272,9 @@ const Login = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor={passwordFieldName}>
+              Password
+            </label>
             <div style={{ position: 'relative' }}>
               <Lock
                 size={18}
@@ -254,7 +282,11 @@ const Login = () => {
                 style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
+                key={passwordFieldName}
+                id={passwordFieldName}
+                name={passwordFieldName}
                 type="password"
+                autoComplete="new-password"
                 className="form-input"
                 style={{ paddingLeft: '38px' }}
                 placeholder="Enter password"
@@ -271,7 +303,7 @@ const Login = () => {
             disabled={loading}
             style={{ width: '100%', padding: '12px', marginTop: '12px', fontSize: '0.95rem' }}
           >
-            {loading ? 'Authenticating...' : 'Sign In to Portal'}
+            {loading ? 'Authenticating...' : `Sign In as ${activeTab === 'admin' ? 'Admin' : 'Member'}`}
             {!loading && <ArrowRight size={18} />}
           </button>
         </form>

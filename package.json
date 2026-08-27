@@ -1,17 +1,16 @@
 {
-  "name": "bachat-gat-monorepo",
+  "name": "bachat-gat-portal",
   "version": "1.0.0",
+  "type": "module",
   "description": "Bachat Gat – Digital Savings Group Management System",
   "scripts": {
-    "db:setup": "node database/setup.js",
-    "test:api": "node server/test-api.js",
-    "server:install": "cd server && npm install",
-    "client:install": "cd client && npm install",
-    "install:all": "npm run server:install && npm run client:install",
-    "server:dev": "cd server && npm run dev",
-    "client:dev": "cd client && npm run dev"
+    "dev": "cd client && npm run dev",
+    "build": "cd client && npm run build",
+    "preview": "cd client && npm run preview",
+    "admin:create": "node scripts/create-admin.js",
+    "firebase:seed": "node database/seed-firebase.js"
   },
-  "keywords": ["bachat-gat", "microfinance", "react", "express", "mysql"],
+  "keywords": ["bachat-gat", "microfinance", "react", "firebase", "firestore"],
   "author": "Internship Project",
   "license": "ISC"
 }

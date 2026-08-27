@@ -8,6 +8,12 @@ import RecordSavingsModal from '../components/forms/RecordSavingsModal';
 import CreateLoanModal from '../components/forms/CreateLoanModal';
 import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
 import {
+  formatCurrency,
+  formatNumber,
+  formatDate,
+  formatMonthYear,
+} from '../utils/formatters';
+import {
   ArrowLeft,
   User,
   Phone,
@@ -241,10 +247,10 @@ const MemberDetails = () => {
             TOTAL ACCUMULATED SAVINGS
           </span>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
-            ₹{member.totalSavings.toLocaleString('en-IN')}
+            {formatCurrency(member.totalSavings || member.total_savings)}
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            ₹{parseFloat(member.monthly_contribution).toLocaleString('en-IN')} monthly share
+            {formatCurrency(member.monthlyContribution || member.monthly_contribution)} monthly share
           </span>
         </div>
 
@@ -252,11 +258,11 @@ const MemberDetails = () => {
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
             ACTIVE LOAN OUTSTANDING
           </span>
-          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: member.totalOutstanding > 0 ? 'var(--danger-text)' : 'var(--text-primary)', marginTop: '4px' }}>
-            ₹{member.totalOutstanding.toLocaleString('en-IN')}
+          <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (member.totalOutstanding || member.total_outstanding) > 0 ? 'var(--danger-text)' : 'var(--text-primary)', marginTop: '4px' }}>
+            {formatCurrency(member.totalOutstanding || member.total_outstanding)}
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            {member.loans.filter((l) => l.status === 'ACTIVE').length} active loan(s)
+            {(member.loans || []).filter((l) => l.status === 'ACTIVE').length} active loan(s)
           </span>
         </div>
 
@@ -265,10 +271,10 @@ const MemberDetails = () => {
             TOTAL LOANS ISSUED
           </span>
           <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
-            {member.loans.length}
+            {(member.loans || []).length}
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            {member.loans.filter((l) => l.status === 'CLOSED').length} closed successfully
+            {(member.loans || []).filter((l) => l.status === 'CLOSED').length} closed successfully
           </span>
         </div>
       </div>
@@ -279,21 +285,21 @@ const MemberDetails = () => {
           onClick={() => setActiveTab('savings')}
           className={`tab-btn ${activeTab === 'savings' ? 'active' : ''}`}
         >
-          <PiggyBank size={18} /> Savings History ({member.savingsHistory.length})
+          <PiggyBank size={18} /> Savings History ({(member.savingsHistory || []).length})
         </button>
 
         <button
           onClick={() => setActiveTab('loans')}
           className={`tab-btn ${activeTab === 'loans' ? 'active' : ''}`}
         >
-          <HandCoins size={18} /> Loans ({member.loans.length})
+          <HandCoins size={18} /> Loans ({(member.loans || []).length})
         </button>
 
         <button
           onClick={() => setActiveTab('repayments')}
           className={`tab-btn ${activeTab === 'repayments' ? 'active' : ''}`}
         >
-          <CreditCard size={18} /> Loan Repayments ({member.repayments.length})
+          <CreditCard size={18} /> Loan Repayments ({(member.repayments || []).length})
         </button>
       </div>
 
@@ -309,7 +315,7 @@ const MemberDetails = () => {
             )}
           </div>
 
-          {member.savingsHistory.length === 0 ? (
+          {(!member.savingsHistory || member.savingsHistory.length === 0) ? (
             <EmptyState icon={PiggyBank} title="No savings recorded yet" description="No monthly contribution records exist for this member." />
           ) : (
             <div className="table-responsive">
@@ -326,13 +332,13 @@ const MemberDetails = () => {
                 </thead>
                 <tbody>
                   {member.savingsHistory.map((s) => (
-                    <tr key={s.id}>
+                    <tr key={s.id || s.saving_id}>
                       <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                        {new Date(s.year, s.month - 1).toLocaleString('default', { month: 'long' })} {s.year}
+                        {formatMonthYear(s.month, s.year)}
                       </td>
-                      <td style={{ fontWeight: 700, color: 'var(--success-text)' }}>₹{parseFloat(s.amount).toLocaleString('en-IN')}</td>
-                      <td>{new Date(s.payment_date).toLocaleDateString('en-IN')}</td>
-                      <td><span className="badge badge-info">{s.payment_mode}</span></td>
+                      <td style={{ fontWeight: 700, color: 'var(--success-text)' }}>{formatCurrency(s.amount)}</td>
+                      <td>{formatDate(s.payment_date || s.paymentDate)}</td>
+                      <td><span className="badge badge-info">{s.payment_mode || s.paymentMode || 'UPI'}</span></td>
                       <td style={{ color: 'var(--text-secondary)' }}>{s.remarks || '—'}</td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.recorded_by_name || 'System'}</td>
                     </tr>
@@ -347,30 +353,30 @@ const MemberDetails = () => {
       {/* Tab 2: Loans */}
       {activeTab === 'loans' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {member.loans.length === 0 ? (
+          {(!member.loans || member.loans.length === 0) ? (
             <div className="card">
               <EmptyState icon={HandCoins} title="No loans on record" description="This member has not taken any loans from the group." />
             </div>
           ) : (
             member.loans.map((loan) => (
-              <div key={loan.id} className="card" style={{ padding: '20px' }}>
+              <div key={loan.id || loan.loan_id} className="card" style={{ padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '14px' }}>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <h3 style={{ fontSize: '1.1rem' }}>Loan #{loan.loan_number}</h3>
+                      <h3 style={{ fontSize: '1.1rem' }}>Loan #{loan.loan_number || loan.loanNumber}</h3>
                       <span className={`badge ${loan.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`}>
                         {loan.status}
                       </span>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      Disbursed on {new Date(loan.loan_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} • Purpose: {loan.purpose}
+                      Disbursed on {formatDate(loan.loan_date || loan.loanDate)} • Purpose: {loan.purpose || 'General'}
                     </div>
                   </div>
 
                   {canManageLoans && loan.status === 'ACTIVE' && (
                     <button
                       onClick={() => {
-                        setSelectedLoanId(loan.id);
+                        setSelectedLoanId(loan.id || loan.loan_id);
                         setIsRepayOpen(true);
                       }}
                       className="btn-primary"
@@ -384,20 +390,20 @@ const MemberDetails = () => {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', background: '#F8FAFC', padding: '12px 16px', borderRadius: 'var(--radius-md)' }}>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>PRINCIPAL</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 800 }}>₹{parseFloat(loan.principal_amount).toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800 }}>{formatCurrency(loan.principal_amount || loan.principalAmount)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>INTEREST RATE</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--info)' }}>{loan.interest_rate}% / mo</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--info)' }}>{loan.interest_rate || loan.interestRate || 2}% / mo</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>PRINCIPAL REPAID</div>
-                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--success-text)' }}>₹{parseFloat(loan.total_principal_paid).toLocaleString('en-IN')}</div>
+                    <div style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--success-text)' }}>{formatCurrency(loan.total_principal_paid)}</div>
                   </div>
                   <div>
                     <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700 }}>OUTSTANDING</div>
                     <div style={{ fontSize: '1rem', fontWeight: 800, color: loan.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--text-muted)' }}>
-                      ₹{parseFloat(loan.outstanding_amount).toLocaleString('en-IN')}
+                      {formatCurrency(loan.outstanding_amount || loan.outstandingAmount)}
                     </div>
                   </div>
                 </div>
@@ -411,7 +417,7 @@ const MemberDetails = () => {
       {activeTab === 'repayments' && (
         <div className="card">
           <h2 style={{ fontSize: '1.15rem', marginBottom: '16px' }}>Loan Repayment Transactions</h2>
-          {member.repayments.length === 0 ? (
+          {(!member.repayments || member.repayments.length === 0) ? (
             <EmptyState icon={CreditCard} title="No repayments found" description="No repayment transactions recorded for this member." />
           ) : (
             <div className="table-responsive">
@@ -430,14 +436,14 @@ const MemberDetails = () => {
                 </thead>
                 <tbody>
                   {member.repayments.map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ fontWeight: 700 }}>{r.loan_number}</td>
-                      <td>{r.payment_month}/{r.payment_year}</td>
-                      <td style={{ fontWeight: 600 }}>₹{parseFloat(r.principal_repayment_amount).toLocaleString('en-IN')}</td>
-                      <td style={{ fontWeight: 600, color: 'var(--primary)' }}>₹{parseFloat(r.interest_amount).toLocaleString('en-IN')}</td>
-                      <td style={{ fontWeight: 800, color: 'var(--success-text)' }}>₹{parseFloat(r.total_payment).toLocaleString('en-IN')}</td>
-                      <td>{new Date(r.payment_date).toLocaleDateString('en-IN')}</td>
-                      <td><span className="badge badge-info">{r.payment_mode}</span></td>
+                    <tr key={r.id || r.repayment_id}>
+                      <td style={{ fontWeight: 700 }}>{r.loan_number || r.loanNumber}</td>
+                      <td>{r.payment_month || r.month}/{r.payment_year || r.year}</td>
+                      <td style={{ fontWeight: 600 }}>{formatCurrency(r.principal_repayment_amount)}</td>
+                      <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(r.interest_amount)}</td>
+                      <td style={{ fontWeight: 800, color: 'var(--success-text)' }}>{formatCurrency(r.total_payment)}</td>
+                      <td>{formatDate(r.payment_date || r.paymentDate)}</td>
+                      <td><span className="badge badge-info">{r.payment_mode || r.paymentMode || 'UPI'}</span></td>
                       <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{r.recorded_by_name || 'System'}</td>
                     </tr>
                   ))}
@@ -453,7 +459,7 @@ const MemberDetails = () => {
         isOpen={isSavingsOpen}
         onClose={() => setIsSavingsOpen(false)}
         onSuccess={fetchMember}
-        initialMemberId={parseInt(id, 10)}
+        initialMemberId={id}
       />
 
       <CreateLoanModal

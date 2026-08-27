@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
 import {
   User,
@@ -14,6 +15,7 @@ import {
 
 const Register = () => {
   const navigate = useNavigate();
+  const { register, isAuthenticated, loading: authLoading } = useAuth();
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -22,6 +24,12 @@ const Register = () => {
     password: '',
     confirmPassword: '',
   });
+
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
@@ -93,7 +101,7 @@ const Register = () => {
 
     try {
       setLoading(true);
-      const res = await authService.register({
+      await register({
         fullName: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
@@ -101,18 +109,12 @@ const Register = () => {
         confirmPassword: formData.confirmPassword,
       });
 
-      if (res.success) {
-        setSuccessMessage(res.message || 'Registration successful! Please login to continue.');
-        setTimeout(() => {
-          navigate('/login', {
-            state: { registeredEmail: formData.email.trim().toLowerCase(), message: 'Registration successful! Please login.' },
-          });
-        }, 1500);
-      }
+      setSuccessMessage('Account registered successfully! Redirecting to dashboard...');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1000);
     } catch (err) {
-      setServerError(
-        err.response?.data?.message || err.message || 'Registration failed. Please check details and try again.'
-      );
+      setServerError(err.message || 'Registration failed. Please check details and try again.');
     } finally {
       setLoading(false);
     }

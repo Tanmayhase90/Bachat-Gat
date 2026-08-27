@@ -33,7 +33,7 @@ const Settings = () => {
 
   // Profile settings state
   const [profileData, setProfileData] = useState({
-    name: user?.name || '',
+    name: user?.fullName || user?.name || '',
     phone: user?.phone || '',
     currentPassword: '',
     newPassword: '',
@@ -41,6 +41,16 @@ const Settings = () => {
 
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  useEffect(() => {
+    if (user) {
+      setProfileData((prev) => ({
+        ...prev,
+        name: user.fullName || user.name || '',
+        phone: user.phone || '',
+      }));
+    }
+  }, [user]);
 
   useEffect(() => {
     const fetchGroup = async () => {

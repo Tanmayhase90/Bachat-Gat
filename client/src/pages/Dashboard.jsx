@@ -5,6 +5,7 @@ import { dashboardService } from '../services/dashboardService';
 import StatCard from '../components/common/StatCard';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
+import { formatCurrency, formatNumber, formatDate, formatMonthYear, formatPercentage } from '../utils/formatters';
 import {
   Wallet,
   PiggyBank,
@@ -24,7 +25,8 @@ import {
 const Dashboard = () => {
   const { user, groupName, isAdmin, isMember } = useAuth();
   const navigate = useNavigate();
-  const { refreshTrigger, openAddMember, openRecordSavings, openCreateLoan, openRecordRepayment } = useOutletContext();
+  const outletContext = useOutletContext() || {};
+  const { refreshTrigger = 0, openAddMember, openRecordSavings, openCreateLoan, openRecordRepayment } = outletContext;
 
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
@@ -39,21 +41,22 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [sumRes, progRes, actRes] = await Promise.all([
-        dashboardService.getSummary(),
-        dashboardService.getMonthlyProgress(selectedMonth, selectedYear),
-        dashboardService.getRecentActivities(8),
+      const memberLookupId = user?.memberId || user?.uid || '';
+      const [sumRes, progRes, actRes] = await Promise.allSettled([
+        dashboardService.getSummary('shivshahi_group_001', memberLookupId),
+        dashboardService.getMonthlyProgress(selectedMonth, selectedYear, 'shivshahi_group_001'),
+        dashboardService.getRecentActivities(8, 'shivshahi_group_001'),
       ]);
 
-      if (sumRes.success) {
-        setSummary(sumRes.summary);
-        setMemberSummary(sumRes.memberSummary);
+      if (sumRes.status === 'fulfilled' && sumRes.value?.success) {
+        setSummary(sumRes.value.summary || null);
+        setMemberSummary(sumRes.value.memberSummary || null);
       }
-      if (progRes.success) {
-        setProgress(progRes.progress);
+      if (progRes.status === 'fulfilled' && progRes.value?.success) {
+        setProgress(progRes.value.progress || null);
       }
-      if (actRes.success) {
-        setActivities(actRes.activities);
+      if (actRes.status === 'fulfilled' && actRes.value?.success) {
+        setActivities(actRes.value.activities || []);
       }
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
@@ -64,7 +67,20 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, [refreshTrigger, selectedMonth, selectedYear]);
+
+    // Set up real-time listener for instant sync with Flutter Mobile app
+    const memberLookupId = user?.memberId || user?.uid || '';
+    const unsubscribe = dashboardService.subscribeToDashboard('shivshahi_group_001', memberLookupId, (liveData) => {
+      if (liveData?.summary) {
+        setSummary(liveData.summary);
+        if (liveData.memberSummary) setMemberSummary(liveData.memberSummary);
+      }
+    });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
+  }, [refreshTrigger, selectedMonth, selectedYear, user?.uid, user?.memberId]);
 
   const months = [
     { value: 1, label: 'January' },
@@ -84,6 +100,13 @@ const Dashboard = () => {
   if (loading && !summary) {
     return <Loader text="Loading group financial metrics..." />;
   }
+
+  const safeTotalGroupFund = summary?.totalGroupFund ?? 0;
+  const safeTotalSavings = summary?.totalSavings ?? 0;
+  const safeActiveLoans = summary?.activeLoans ?? 0;
+  const safeActiveLoansCount = summary?.activeLoansCount ?? 0;
+  const safeTotalInterest = summary?.totalInterest ?? 0;
+  const safeAvailableBalance = summary?.availableBalance ?? 0;
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -107,10 +130,10 @@ const Dashboard = () => {
             <ShieldCheck size={14} /> {(groupName || user?.groupName || summary?.groupName || 'BACHAT GAT').toUpperCase()}
           </div>
           <h1 style={{ color: '#FFFFFF', fontSize: '2.25rem', fontWeight: 800, marginBottom: '4px' }}>
-            ₹{summary ? summary.totalGroupFund.toLocaleString('en-IN') : '0'}
+            {formatCurrency(safeTotalGroupFund)}
           </h1>
           <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.95rem' }}>
-            Total Group Fund (Total Savings ₹{summary?.totalSavings.toLocaleString('en-IN')} + Interest ₹{summary?.totalInterest.toLocaleString('en-IN')})
+            Total Group Fund (Total Savings {formatCurrency(safeTotalSavings)} + Interest {formatCurrency(safeTotalInterest)})
           </p>
         </div>
 
@@ -127,7 +150,7 @@ const Dashboard = () => {
           >
             <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600 }}>AVAILABLE BALANCE</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#FFFFFF' }}>
-              ₹{summary ? summary.availableBalance.toLocaleString('en-IN') : '0'}
+              {formatCurrency(safeAvailableBalance)}
             </div>
           </div>
 
@@ -143,7 +166,7 @@ const Dashboard = () => {
           >
             <div style={{ fontSize: '0.75rem', color: 'rgba(255, 255, 255, 0.8)', fontWeight: 600 }}>ACTIVE LOANS</div>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#FFFFFF' }}>
-              ₹{summary ? summary.activeLoans.toLocaleString('en-IN') : '0'}
+              {formatCurrency(safeActiveLoans)}
             </div>
           </div>
         </div>
@@ -166,19 +189,19 @@ const Dashboard = () => {
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>My Total Savings</span>
               <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success-text)' }}>
-                ₹{memberSummary.mySavings.toLocaleString('en-IN')}
+                {formatCurrency(memberSummary.mySavings)}
               </div>
             </div>
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Active Loan Dues</span>
-              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: memberSummary.myLoanOutstanding > 0 ? 'var(--danger-text)' : 'var(--text-primary)' }}>
-                ₹{memberSummary.myLoanOutstanding.toLocaleString('en-IN')}
+              <div style={{ fontSize: '1.4rem', fontWeight: 800, color: (memberSummary.myLoanOutstanding > 0) ? 'var(--danger-text)' : 'var(--text-primary)' }}>
+                {formatCurrency(memberSummary.myLoanOutstanding)}
               </div>
             </div>
             <div>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Interest Paid</span>
               <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)' }}>
-                ₹{memberSummary.myInterestPaid.toLocaleString('en-IN')}
+                {formatCurrency(memberSummary.myInterestPaid)}
               </div>
             </div>
           </div>
@@ -189,28 +212,28 @@ const Dashboard = () => {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
         <StatCard
           title="Total Savings"
-          value={`₹${summary?.totalSavings.toLocaleString('en-IN')}`}
+          value={formatCurrency(safeTotalSavings)}
           subtitle="Cumulative member savings"
           icon={PiggyBank}
           colorScheme="pink"
         />
         <StatCard
           title="Active Loans"
-          value={`₹${summary?.activeLoans.toLocaleString('en-IN')}`}
-          subtitle={`${summary?.activeLoansCount} active loans outstanding`}
+          value={formatCurrency(safeActiveLoans)}
+          subtitle={`${safeActiveLoansCount} active loans outstanding`}
           icon={HandCoins}
           colorScheme="amber"
         />
         <StatCard
           title="Total Interest"
-          value={`₹${summary?.totalInterest.toLocaleString('en-IN')}`}
+          value={formatCurrency(safeTotalInterest)}
           subtitle="Revenue generated from loans"
           icon={TrendingUp}
           colorScheme="purple"
         />
         <StatCard
           title="Available Balance"
-          value={`₹${summary?.availableBalance.toLocaleString('en-IN')}`}
+          value={formatCurrency(safeAvailableBalance)}
           subtitle="Ready for new loan disbursement"
           icon={Wallet}
           colorScheme="green"
@@ -354,13 +377,13 @@ const Dashboard = () => {
                   <div>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>COLLECTED AMOUNT</span>
                     <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--primary)' }}>
-                      ₹{progress.collectedAmount.toLocaleString('en-IN')}
+                      {formatCurrency(progress.collectedAmount)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>MONTHLY TARGET</span>
                     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--text-secondary)' }}>
-                      ₹{progress.targetAmount.toLocaleString('en-IN')}
+                      {formatCurrency(progress.targetAmount || progress.monthlyTarget)}
                     </div>
                   </div>
                 </div>
@@ -370,7 +393,7 @@ const Dashboard = () => {
                   <div
                     style={{
                       height: '100%',
-                      width: `${progress.progressPercentage}%`,
+                      width: `${progress.progressPercentage || 0}%`,
                       background: 'var(--primary-gradient)',
                       borderRadius: 'var(--radius-full)',
                       transition: 'width 0.5s ease',
@@ -379,14 +402,14 @@ const Dashboard = () => {
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600 }}>
-                  <span style={{ color: 'var(--primary)' }}>{progress.progressPercentage}% Completed</span>
-                  <span style={{ color: progress.pendingMembersCount > 0 ? 'var(--danger)' : 'var(--success)' }}>
-                    {progress.pendingMembersCount} Pending Members
+                  <span style={{ color: 'var(--primary)' }}>{progress.progressPercentage || 0}% Completed</span>
+                  <span style={{ color: (progress.pendingMembersCount > 0) ? 'var(--danger)' : 'var(--success)' }}>
+                    {progress.pendingMembersCount || 0} Pending Members
                   </span>
                 </div>
 
                 {/* Pending Members Pill List */}
-                {progress.pendingMembers && progress.pendingMembers.length > 0 && (
+                {Array.isArray(progress.pendingMembers) && progress.pendingMembers.length > 0 && (
                   <div style={{ marginTop: '20px', background: '#FFF5F8', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(194, 24, 91, 0.15)' }}>
                     <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '8px' }}>
                       MEMBERS PENDING FOR THIS MONTH ({progress.pendingMembers.length}):
@@ -394,7 +417,7 @@ const Dashboard = () => {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                       {progress.pendingMembers.map((pm) => (
                         <span
-                          key={pm.member_id}
+                          key={pm.member_id || pm.name}
                           style={{
                             background: '#FFFFFF',
                             border: '1px solid var(--border-color)',
@@ -424,7 +447,7 @@ const Dashboard = () => {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '380px', overflowY: 'auto' }}>
-            {activities.length === 0 ? (
+            {(!activities || activities.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                 No recent activity recorded.
               </div>
@@ -463,7 +486,7 @@ const Dashboard = () => {
                       {act.description}
                     </div>
                     <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                      {new Date(act.created_at).toLocaleString('en-IN', {
+                      {formatDate(act.created_at, {
                         day: 'numeric',
                         month: 'short',
                         hour: '2-digit',

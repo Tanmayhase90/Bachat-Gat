@@ -202,7 +202,7 @@ const Members = () => {
                     <div>
                       <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>{m.name}</h3>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        {m.member_code} • Joined {new Date(m.joined_date).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
+                        {m.member_code} • Joined {formatDate(m.joined_date || m.joinDate || m.joinedAt, { month: 'short', year: 'numeric' })}
                       </div>
                     </div>
                   </div>

@@ -237,7 +237,7 @@ const MemberDetails = () => {
                 </span>
               )}
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Calendar size={15} /> Joined {new Date(member.joined_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                <Calendar size={15} /> Joined {formatDate(member.joined_date || member.joinDate || member.joinedAt)}
               </span>
             </div>
           </div>

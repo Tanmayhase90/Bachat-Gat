@@ -7,6 +7,7 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Pages
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import MemberDetails from './pages/MemberDetails';
@@ -24,7 +25,8 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Navigate to="/login" replace />} />
+            <Route path="/signup" element={<Register />} />
+            <Route path="/register" element={<Register />} />
 
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>
@@ -33,6 +35,7 @@ function App() {
                 <Route path="/members" element={<Members />} />
                 <Route path="/members/:id" element={<MemberDetails />} />
                 <Route path="/savings" element={<Savings />} />
+                <Route path="/monthly-savings" element={<Savings />} />
                 <Route path="/loans" element={<Loans />} />
                 <Route path="/loans/:id" element={<LoanDetails />} />
                 <Route path="/reports" element={<Reports />} />

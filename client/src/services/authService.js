@@ -275,10 +275,9 @@ export const authService = {
       // 1. Check user profile in Firestore: users/{uid}
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
-
       let userData = userDoc.exists() ? userDoc.data() : null;
 
-      // 2. Look up matching member in Firestore by authUid, userId, or email
+      // 2. Look up matching member in Firestore
       let linkedMember = null;
       let linkedMemberId = userData?.memberId || null;
 
@@ -295,9 +294,11 @@ export const authService = {
           const found = membersSnap.docs.find((d) => {
             const m = d.data();
             return (
+              d.id === user.uid ||
               m.userId === user.uid ||
               m.authUid === user.uid ||
               m.firebaseUid === user.uid ||
+              m.uid === user.uid ||
               (m.email && m.email.toLowerCase() === cleanEmail)
             );
           });
@@ -316,76 +317,121 @@ export const authService = {
             }, { merge: true });
           }
         } catch (e) {
-          console.warn('Notice: Member lookup by email failed in subcollection:', e);
+          console.warn('Notice: Subcollection member lookup:', e);
         }
       }
 
-      // 3. Construct or ensure Firestore user profile
-      const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN';
-      const resolvedRole = isUserAdmin ? 'admin' : (userData?.role || linkedMember?.role || 'member').toLowerCase();
-      const resolvedFullName = userData?.fullName || userData?.name || linkedMember?.fullName || linkedMember?.name || user.displayName || 'Member';
+      // Check top-level members collection if still not found
+      if (!linkedMember) {
+        try {
+          const topDoc = await getDoc(doc(db, 'members', user.uid)).catch(() => null);
+          if (topDoc && topDoc.exists()) {
+            linkedMember = topDoc.data();
+            linkedMemberId = topDoc.id;
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
 
-      if (!userDoc.exists()) {
+      // 3. Resolve role and full name
+      const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN' || linkedMember?.role === 'admin' || linkedMember?.role_name === 'ADMIN';
+      const resolvedRole = isUserAdmin ? 'admin' : (userData?.role || linkedMember?.role || 'member').toLowerCase();
+      const resolvedFullName = userData?.fullName || userData?.name || linkedMember?.fullName || linkedMember?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'Member');
+      const resolvedPhone = userData?.phone || linkedMember?.phone || '';
+
+      // If member record still doesn't exist, auto-create one under groups/shivshahi_group_001/members
+      if (!linkedMember) {
+        try {
+          const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
+          let maxNum = 0;
+          membersSnap.docs.forEach((d) => {
+            const num = parseInt(d.id.replace(/\D/g, ''), 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          });
+          linkedMemberId = `M_${maxNum + 1}`;
+          const newMemberPayload = {
+            id: linkedMemberId,
+            userId: user.uid,
+            authUid: user.uid,
+            firebaseUid: user.uid,
+            groupId: 'shivshahi_group_001',
+            name: resolvedFullName,
+            fullName: resolvedFullName,
+            email: cleanEmail,
+            phone: resolvedPhone,
+            shares: 1,
+            shareCount: 1,
+            monthlyContribution: 1000,
+            monthlyContributionPerShare: 1000,
+            monthlyHaftaAmount: 1000,
+            status: 'active',
+            joinDate: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          await setDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', linkedMemberId), newMemberPayload, { merge: true });
+          linkedMember = newMemberPayload;
+        } catch (err) {
+          console.warn('Notice: Member auto-creation on login:', err);
+        }
+      }
+
+      // 4. Save/update user profile in users/{uid}
+      if (!userDoc.exists() || !userData?.memberId) {
         userData = {
           uid: user.uid,
           id: user.uid,
           fullName: resolvedFullName,
           name: resolvedFullName,
           email: cleanEmail,
-          phone: userData?.phone || linkedMember?.phone || '',
+          phone: resolvedPhone,
           role: resolvedRole,
           role_name: resolvedRole.toUpperCase(),
-          isActive: linkedMember?.isActive !== false && linkedMember?.status !== 'INACTIVE',
+          isActive: true,
           memberId: linkedMemberId || '',
-          memberCode: linkedMember?.memberCode || '',
-          groupId: linkedMember?.groupId || 'shivshahi_group_001',
-          groupName: linkedMember?.groupName || 'Chhatrapati Bachat Gat',
-          createdAt: serverTimestamp(),
+          memberCode: linkedMember?.memberCode || linkedMemberId || '',
+          groupId: 'shivshahi_group_001',
+          groupName: 'Chhatrapati Bachat Gat, Ghargaon Stand',
+          createdAt: userData?.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
         };
         await setDoc(userDocRef, userData, { merge: true });
       }
 
-      // 4. Check if user/member is active
+      // 5. Check if account is active
       if (userData.isActive === false || linkedMember?.status === 'INACTIVE' || linkedMember?.isActive === false) {
         await signOut(auth);
         throw new Error('Your account is deactivated. Please contact admin.');
       }
 
-      // 5. Enforce role requirement based on selected tab (Admin Login vs Member Login)
+      // 6. Enforce Admin Login tab check
       if (expectedRole) {
         const reqRole = expectedRole.toLowerCase();
         if (reqRole === 'admin' && resolvedRole !== 'admin') {
           await signOut(auth);
-          throw new Error('This account does not have admin access.');
-        }
-        if (reqRole === 'member' && resolvedRole !== 'member') {
-          await signOut(auth);
-          throw new Error('This account is not registered as a member.');
-        }
-        if (reqRole === 'member' && (!linkedMemberId || !linkedMember)) {
-          await signOut(auth);
-          throw new Error('This login is not assigned to a group member. Please contact admin.');
+          throw new Error('This account does not have admin access. Please use Member Login.');
         }
       }
 
-      // 6. Retrieve dynamic group details
+      // 7. Retrieve dynamic group details
       const groupData = await groupService.getGroupDetails(userData.groupId || 'shivshahi_group_001');
-      const liveGroupName = groupData.group?.groupName || userData.groupName || 'Chhatrapati Bachat Gat';
+      const liveGroupName = groupData.group?.groupName || groupData.group?.name || userData.groupName || 'Chhatrapati Bachat Gat, Ghargaon Stand';
 
       const resolvedUser = {
         ...userData,
+        ...linkedMember,
         id: user.uid,
         uid: user.uid,
         fullName: resolvedFullName,
         name: resolvedFullName,
         email: user.email,
-        phone: userData.phone || linkedMember?.phone || '',
+        phone: resolvedPhone,
         role: resolvedRole,
         role_name: resolvedRole.toUpperCase(),
         groupName: liveGroupName,
         memberId: linkedMemberId || userData.memberId || '',
-        memberCode: linkedMember?.memberCode || userData.memberCode || '',
+        memberCode: linkedMember?.memberCode || userData.memberCode || linkedMemberId || '',
       };
 
       const token = await user.getIdToken();
@@ -398,8 +444,7 @@ export const authService = {
       };
     } catch (err) {
       if (
-        err.message === 'This account does not have admin access.' ||
-        err.message === 'This account is not registered as a member.' ||
+        err.message === 'This account does not have admin access. Please use Member Login.' ||
         err.message === 'Your account is deactivated. Please contact admin.'
       ) {
         throw err;

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
   const location = useLocation();
@@ -12,6 +12,7 @@ const Login = () => {
   const [activeTab, setActiveTab] = useState('member'); // 'member' | 'admin'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
@@ -24,7 +25,7 @@ const Login = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Ensure fields are clean on mount unless redirected from registration
+  // Load any registration success info or registered email on initial mount only
   useEffect(() => {
     if (location.state?.message) {
       setSuccessInfo(location.state.message);
@@ -32,17 +33,11 @@ const Login = () => {
     if (location.state?.registeredEmail) {
       setEmail(location.state.registeredEmail);
       setActiveTab('member');
-      setPassword('');
-    } else {
-      setEmail('');
-      setPassword('');
     }
-  }, [location.state]);
+  }, []);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setEmail('');
-    setPassword('');
     setError('');
     setSuccessInfo('');
   };
@@ -60,7 +55,7 @@ const Login = () => {
       setSuccessInfo('');
       // Authenticate with Firebase and enforce role based on selected tab ('admin' | 'member')
       await login(email.trim(), password, activeTab);
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err) {
       setError(err.message || 'Login failed. Please check credentials.');
     } finally {
@@ -263,12 +258,11 @@ const Login = () => {
         )}
 
         <form
-          key={`login-form-${activeTab}`}
           onSubmit={handleLogin}
           autoComplete="off"
         >
           <div className="form-group">
-            <label className="form-label" htmlFor={emailFieldName}>
+            <label className="form-label" htmlFor="login_email_input">
               {activeTab === 'admin' ? 'Admin Email' : 'Member Email'}
             </label>
             <div style={{ position: 'relative' }}>
@@ -278,11 +272,10 @@ const Login = () => {
                 style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
-                key={emailFieldName}
-                id={emailFieldName}
-                name={emailFieldName}
+                id="login_email_input"
+                name="email"
                 type="email"
-                autoComplete="off"
+                autoComplete="email"
                 autoCapitalize="off"
                 spellCheck="false"
                 className="form-input"
@@ -297,7 +290,7 @@ const Login = () => {
 
           <div className="form-group">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
-              <label className="form-label" htmlFor={passwordFieldName}>
+              <label className="form-label" htmlFor="login_password_input">
                 Password
               </label>
               <button
@@ -322,18 +315,37 @@ const Login = () => {
                 style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
               />
               <input
-                key={passwordFieldName}
-                id={passwordFieldName}
-                name={passwordFieldName}
-                type="password"
+                id="login_password_input"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
                 autoComplete="current-password"
                 className="form-input"
-                style={{ paddingLeft: '38px' }}
+                style={{ paddingLeft: '38px', paddingRight: '40px' }}
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                style={{
+                  position: 'absolute',
+                  right: '12px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                }}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 
@@ -348,7 +360,29 @@ const Login = () => {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+        {/* Sign Up Navigation Option */}
+        <div
+          style={{
+            textAlign: 'center',
+            marginTop: '20px',
+            fontSize: '0.875rem',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          Don't have an account?{' '}
+          <Link
+            to="/signup"
+            style={{
+              color: 'var(--primary)',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Sign Up
+          </Link>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
           Secure Self Help Group Portal • Bachat Gat 2026
         </div>
       </div>

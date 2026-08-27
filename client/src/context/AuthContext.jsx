@@ -27,6 +27,7 @@ async function resolveUserProfile(currentFirebaseUser) {
   let userData = null;
   let memberData = null;
   let memberId = null;
+  const cleanEmail = (currentFirebaseUser.email || '').trim().toLowerCase();
 
   // 1. Look up in users/{uid}
   try {
@@ -34,32 +35,59 @@ async function resolveUserProfile(currentFirebaseUser) {
     const userDocSnap = await getDoc(userDocRef);
     if (userDocSnap.exists()) {
       userData = userDocSnap.data();
+      memberId = userData?.memberId || null;
     }
   } catch (err) {
     console.warn('Notice: Failed reading users/{uid}:', err);
   }
 
-  // 2. Look up in members subcollection by authUid, userId, or email
-  try {
-    const cleanEmail = (currentFirebaseUser.email || '').trim().toLowerCase();
-    const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
-    
-    const found = membersSnap.docs.find((d) => {
-      const m = d.data();
-      return (
-        m.userId === currentFirebaseUser.uid ||
-        m.authUid === currentFirebaseUser.uid ||
-        m.firebaseUid === currentFirebaseUser.uid ||
-        (cleanEmail && m.email && m.email.toLowerCase() === cleanEmail)
-      );
-    });
-
-    if (found) {
-      memberData = found.data();
-      memberId = found.id;
+  // 2. Look up member in subcollection groups/shivshahi_group_001/members
+  if (memberId) {
+    try {
+      const memDoc = await getDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', memberId));
+      if (memDoc.exists()) {
+        memberData = memDoc.data();
+      }
+    } catch (e) {
+      // ignore
     }
-  } catch (err) {
-    console.warn('Notice: Member lookup query:', err);
+  }
+
+  if (!memberData) {
+    try {
+      const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
+      const found = membersSnap.docs.find((d) => {
+        const m = d.data();
+        return (
+          d.id === currentFirebaseUser.uid ||
+          m.userId === currentFirebaseUser.uid ||
+          m.authUid === currentFirebaseUser.uid ||
+          m.firebaseUid === currentFirebaseUser.uid ||
+          m.uid === currentFirebaseUser.uid ||
+          (cleanEmail && m.email && m.email.toLowerCase() === cleanEmail)
+        );
+      });
+
+      if (found) {
+        memberData = found.data();
+        memberId = found.id;
+      }
+    } catch (err) {
+      console.warn('Notice: Member lookup query:', err);
+    }
+  }
+
+  // Check top-level members collection
+  if (!memberData) {
+    try {
+      const topDoc = await getDoc(doc(db, 'members', currentFirebaseUser.uid)).catch(() => null);
+      if (topDoc && topDoc.exists()) {
+        memberData = topDoc.data();
+        memberId = topDoc.id;
+      }
+    } catch (e) {
+      // ignore
+    }
   }
 
   // 3. Resolve active group details
@@ -74,10 +102,46 @@ async function resolveUserProfile(currentFirebaseUser) {
   }
 
   // 4. Resolve full name, phone, and role
-  const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN';
+  const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN' || memberData?.role === 'admin' || memberData?.role_name === 'ADMIN';
   const rawRole = isUserAdmin ? 'admin' : (userData?.role || memberData?.role || 'member').toLowerCase();
   const fullName = userData?.fullName || userData?.name || memberData?.fullName || memberData?.name || currentFirebaseUser.displayName || (currentFirebaseUser.email ? currentFirebaseUser.email.split('@')[0] : 'Member');
   const phone = userData?.phone || memberData?.phone || '';
+
+  // 5. If member record still doesn't exist, auto-create under groups/shivshahi_group_001/members
+  if (!memberData) {
+    try {
+      const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
+      let maxNum = 0;
+      membersSnap.docs.forEach((d) => {
+        const num = parseInt(d.id.replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      });
+      memberId = `M_${maxNum + 1}`;
+      memberData = {
+        id: memberId,
+        userId: currentFirebaseUser.uid,
+        authUid: currentFirebaseUser.uid,
+        firebaseUid: currentFirebaseUser.uid,
+        groupId: 'shivshahi_group_001',
+        name: fullName,
+        fullName: fullName,
+        email: cleanEmail,
+        phone: phone,
+        shares: 1,
+        shareCount: 1,
+        monthlyContribution: 1000,
+        monthlyContributionPerShare: 1000,
+        monthlyHaftaAmount: 1000,
+        status: 'active',
+        joinDate: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      await setDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', memberId), memberData, { merge: true });
+    } catch (e) {
+      console.warn('Notice: Auto-create member in context:', e);
+    }
+  }
 
   const resolvedUser = {
     ...memberData,
@@ -92,14 +156,15 @@ async function resolveUserProfile(currentFirebaseUser) {
     role_name: rawRole.toUpperCase(),
     groupName: currentGroupName,
     memberId: memberId || userData?.memberId || '',
-    memberCode: memberData?.memberCode || userData?.memberCode || '',
+    memberCode: memberData?.memberCode || userData?.memberCode || memberId || '',
   };
 
   // If user document didn't exist in users/{uid}, ensure it is saved
-  if (!userData) {
+  if (!userData || !userData.memberId) {
     try {
       await setDoc(doc(db, 'users', currentFirebaseUser.uid), {
         uid: currentFirebaseUser.uid,
+        id: currentFirebaseUser.uid,
         fullName,
         name: fullName,
         email: currentFirebaseUser.email,
@@ -108,10 +173,10 @@ async function resolveUserProfile(currentFirebaseUser) {
         role_name: rawRole.toUpperCase(),
         isActive: true,
         memberId: memberId || '',
-        memberCode: memberData?.memberCode || '',
-        groupId: memberData?.groupId || 'shivshahi_group_001',
+        memberCode: memberData?.memberCode || memberId || '',
+        groupId: 'shivshahi_group_001',
         groupName: currentGroupName,
-        createdAt: serverTimestamp(),
+        createdAt: userData?.createdAt || serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {

@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 
 const Register = () => {
@@ -25,11 +27,8 @@ const Register = () => {
     confirmPassword: '',
   });
 
-  useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, authLoading, navigate]);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [errors, setErrors] = useState({});
   const [serverError, setServerError] = useState('');
@@ -345,19 +344,40 @@ const Register = () => {
                   style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
                 />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   name="password"
                   className="form-input"
                   style={{
                     paddingLeft: '32px',
+                    paddingRight: '34px',
                     borderColor: errors.password ? 'var(--danger)' : undefined,
                     fontSize: '0.9rem',
                   }}
-                  placeholder="Min 6 characters"
+                  placeholder="Min 6 chars"
                   value={formData.password}
                   onChange={handleChange}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
               {errors.password && (
                 <span style={{ fontSize: '0.725rem', color: 'var(--danger)', marginTop: '2px', fontWeight: 600 }}>
@@ -375,11 +395,12 @@ const Register = () => {
                   style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
                 />
                 <input
-                  type="password"
+                  type={showConfirmPassword ? 'text' : 'password'}
                   name="confirmPassword"
                   className="form-input"
                   style={{
                     paddingLeft: '32px',
+                    paddingRight: '34px',
                     borderColor: errors.confirmPassword ? 'var(--danger)' : undefined,
                     fontSize: '0.9rem',
                   }}
@@ -388,6 +409,26 @@ const Register = () => {
                   onChange={handleChange}
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={{
+                    position: 'absolute',
+                    right: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--text-muted)',
+                    cursor: 'pointer',
+                    padding: '2px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                  aria-label={showConfirmPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showConfirmPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
               {errors.confirmPassword && (
                 <span style={{ fontSize: '0.725rem', color: 'var(--danger)', marginTop: '2px', fontWeight: 600 }}>
@@ -420,7 +461,7 @@ const Register = () => {
               textDecoration: 'none',
             }}
           >
-            Login
+            Sign In
           </Link>
         </div>
 

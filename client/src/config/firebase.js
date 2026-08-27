@@ -6,7 +6,7 @@ import { getFirestore } from 'firebase/firestore';
  * Firebase Web Configuration
  * Connected to Shared Project: bachat-gat-app-9e38e (Used by Flutter Android & React Web)
  */
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyAfSLqG3mqeWxnhk_gBUPkDK9Y4Y17GeFU',
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'bachat-gat-app-9e38e.firebaseapp.com',
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'bachat-gat-app-9e38e',

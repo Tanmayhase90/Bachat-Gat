@@ -101,7 +101,7 @@ const Register = () => {
 
     try {
       setLoading(true);
-      await register({
+      const result = await register({
         fullName: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim(),
@@ -109,7 +109,7 @@ const Register = () => {
         confirmPassword: formData.confirmPassword,
       });
 
-      setSuccessMessage('Account registered successfully! Redirecting to dashboard...');
+      setSuccessMessage(`${result.message || 'Account registered successfully!'} Redirecting to dashboard...`);
       setTimeout(() => {
         navigate('/dashboard');
       }, 1000);

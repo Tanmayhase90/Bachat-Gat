@@ -37,8 +37,15 @@ const NotificationDropdown = () => {
         setIsOpen(false);
       }
     };
+    const handleEscape = (e) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, []);
 
   const handleMarkAllRead = async () => {
@@ -92,6 +99,8 @@ const NotificationDropdown = () => {
           justifyContent: 'center',
         }}
         aria-label="Notifications"
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
       >
         <Bell size={20} />
         {unreadCount > 0 && (
@@ -172,10 +181,16 @@ const NotificationDropdown = () => {
               </div>
             ) : (
               notifications.map((n) => (
-                <div
+                <button
+                  type="button"
                   key={n.id}
+                  disabled={Boolean(n.is_read)}
                   onClick={() => !n.is_read && handleMarkOne(n.id)}
+                  aria-label={n.is_read ? `${n.title}, read` : `${n.title}, mark as read`}
                   style={{
+                    width: '100%',
+                    border: 'none',
+                    textAlign: 'left',
                     padding: '12px 16px',
                     borderBottom: '1px solid #F1F5F9',
                     backgroundColor: n.is_read ? '#FFFFFF' : '#FFF5F8',
@@ -198,7 +213,7 @@ const NotificationDropdown = () => {
                       {formatDate(n.created_at, { hour: '2-digit', minute: '2-digit', month: 'short', day: 'numeric' })}
                     </div>
                   </div>
-                </div>
+                </button>
               ))
             )}
           </div>

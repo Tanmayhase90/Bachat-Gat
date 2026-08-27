@@ -159,8 +159,17 @@ const Members = () => {
           {displayedMembers.map((m) => (
             <div
               key={m.member_id}
-              className="card"
+              className="card keyboard-card"
+              role="link"
+              tabIndex={0}
               onClick={() => navigate(`/members/${m.member_id}`)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  navigate(`/members/${m.member_id}`);
+                }
+              }}
+              aria-label={`Open ${m.name} member profile`}
               style={{
                 cursor: 'pointer',
                 display: 'flex',

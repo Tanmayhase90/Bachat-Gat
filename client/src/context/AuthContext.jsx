@@ -74,7 +74,7 @@ async function resolveUserProfile(currentFirebaseUser) {
   }
 
   // 4. Resolve full name, phone, and role
-  const isUserAdmin = (currentFirebaseUser.email || '').toLowerCase().includes('admin') || userData?.role === 'admin' || userData?.role_name === 'ADMIN';
+  const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN';
   const rawRole = isUserAdmin ? 'admin' : (userData?.role || memberData?.role || 'member').toLowerCase();
   const fullName = userData?.fullName || userData?.name || memberData?.fullName || memberData?.name || currentFirebaseUser.displayName || (currentFirebaseUser.email ? currentFirebaseUser.email.split('@')[0] : 'Member');
   const phone = userData?.phone || memberData?.phone || '';
@@ -109,7 +109,7 @@ async function resolveUserProfile(currentFirebaseUser) {
         isActive: true,
         memberId: memberId || '',
         memberCode: memberData?.memberCode || '',
-        groupId: memberData?.groupId || 'group_001',
+        groupId: memberData?.groupId || 'shivshahi_group_001',
         groupName: currentGroupName,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -148,7 +148,7 @@ export const AuthProvider = ({ children }) => {
 
   // 1. Listen for real-time changes to the active Group document in Firestore
   useEffect(() => {
-    const groupDocRef = doc(db, 'groups', 'group_001');
+    const groupDocRef = doc(db, 'groups', 'shivshahi_group_001');
     const unsubscribeGroup = onSnapshot(groupDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -247,7 +247,7 @@ export const AuthProvider = ({ children }) => {
         if (data.user.groupName) {
           setGroupName(data.user.groupName);
         }
-        return data.user;
+        return data;
       }
       throw new Error(data.message || 'Login failed');
     } finally {

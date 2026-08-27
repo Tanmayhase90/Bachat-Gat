@@ -21,7 +21,7 @@ import {
 const LoanDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { isAdmin } = useAuth();
+  const { canManageLoans } = useAuth();
 
   const [loan, setLoan] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -105,7 +105,7 @@ const LoanDetails = () => {
           )}
         </div>
 
-        {isAdmin && loan.status === 'ACTIVE' && (
+        {canManageLoans && loan.status === 'ACTIVE' && (
           <button onClick={() => setIsRepayOpen(true)} className="btn-primary">
             <CreditCard size={16} /> Record Repayment
           </button>
@@ -152,7 +152,7 @@ const LoanDetails = () => {
             icon={CreditCard}
             title="No repayments recorded"
             description="No installment payments have been made on this loan yet."
-            actionText={isAdmin && loan.status === 'ACTIVE' ? 'Record Payment' : undefined}
+            actionText={canManageLoans && loan.status === 'ACTIVE' ? 'Record Payment' : undefined}
             onAction={() => setIsRepayOpen(true)}
           />
         ) : (

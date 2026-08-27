@@ -1,8 +1,17 @@
+import { initializeApp, deleteApp } from 'firebase/app';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
+  deleteUser,
+  getAuth,
+  inMemoryPersistence,
+  setPersistence,
+  sendPasswordResetEmail,
   updateProfile as updateFirebaseProfile,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword,
 } from 'firebase/auth';
 import {
   doc,
@@ -15,7 +24,7 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
+import { auth, db, firebaseConfig } from '../config/firebase';
 import { groupService } from './groupService';
 
 /**
@@ -56,6 +65,21 @@ function formatAuthError(err) {
 }
 
 export const authService = {
+  sendPasswordReset: async (email) => {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) throw new Error('Please enter your email address first.');
+
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      return {
+        success: true,
+        message: 'Password reset link sent. Please check your email inbox and spam folder.',
+      };
+    } catch (err) {
+      throw new Error(formatAuthError(err));
+    }
+  },
+
   /**
    * Register a new user using Firebase Authentication & Cloud Firestore
    * - Creates the Firebase Auth user via createUserWithEmailAndPassword
@@ -63,14 +87,45 @@ export const authService = {
    * - Attaches authUid/firebaseUid to the existing member document without deleting or creating duplicates
    */
   register: async ({ fullName, email, phone, password }) => {
+    let accountWasCreated = false;
+    let reactivatedExistingAccount = false;
+    let user = null;
+    let reactivationApp = null;
+
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
       const cleanName = (fullName || '').trim();
       const cleanPhone = (phone || '').trim();
 
-      // 1. Create user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      const user = userCredential.user;
+      // Deleted members can leave an orphaned Auth identity. Verify ownership with
+      // the previous password, then safely rebuild the deleted Firestore profile.
+      try {
+        const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        user = userCredential.user;
+        accountWasCreated = true;
+      } catch (createError) {
+        if (createError.code !== 'auth/email-already-in-use') throw createError;
+
+        let existingCredential;
+        try {
+          reactivationApp = initializeApp(firebaseConfig, `registration-reactivation-${Date.now()}`);
+          const reactivationAuth = getAuth(reactivationApp);
+          await setPersistence(reactivationAuth, inMemoryPersistence);
+          existingCredential = await signInWithEmailAndPassword(reactivationAuth, cleanEmail, password);
+        } catch (signInError) {
+          if (signInError.code === 'auth/invalid-credential' || signInError.code === 'auth/wrong-password') {
+            throw new Error('This email belonged to an existing or deleted account. Use its previous password to reactivate it.');
+          }
+          throw signInError;
+        }
+
+        user = existingCredential.user;
+        const existingUserSnap = await getDoc(doc(db, 'users', user.uid));
+        if (existingUserSnap.exists() && existingUserSnap.data().isActive !== false) {
+          throw new Error('This email is already registered and active. Please login instead.');
+        }
+        reactivatedExistingAccount = true;
+      }
 
       // 2. Update Firebase Auth display name
       await updateFirebaseProfile(user, { displayName: cleanName });
@@ -178,16 +233,33 @@ export const authService = {
         id: user.uid,
       };
 
+      if (reactivatedExistingAccount) {
+        const primaryCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+        user = primaryCredential.user;
+      }
       const token = await user.getIdToken();
 
       return {
         success: true,
-        message: 'Account registered successfully! Welcome to Bachat Gat.',
+        message: reactivatedExistingAccount
+          ? 'Deleted member account reactivated successfully!'
+          : 'Account registered successfully! Welcome to Bachat Gat.',
         token,
         user: resolvedUser,
       };
     } catch (err) {
+      if (accountWasCreated && user) {
+        await deleteUser(user).catch(() => {});
+      } else if (reactivatedExistingAccount) {
+        await signOut(auth).catch(() => {});
+      }
       throw new Error(formatAuthError(err));
+    } finally {
+      if (reactivationApp) {
+        const reactivationAuth = getAuth(reactivationApp);
+        if (reactivationAuth.currentUser) await signOut(reactivationAuth).catch(() => {});
+        await deleteApp(reactivationApp).catch(() => {});
+      }
     }
   },
 
@@ -249,7 +321,7 @@ export const authService = {
       }
 
       // 3. Construct or ensure Firestore user profile
-      const isUserAdmin = cleanEmail.includes('admin') || userData?.role === 'admin' || userData?.role_name === 'ADMIN';
+      const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN';
       const resolvedRole = isUserAdmin ? 'admin' : (userData?.role || linkedMember?.role || 'member').toLowerCase();
       const resolvedFullName = userData?.fullName || userData?.name || linkedMember?.fullName || linkedMember?.name || user.displayName || 'Member';
 
@@ -266,7 +338,7 @@ export const authService = {
           isActive: linkedMember?.isActive !== false && linkedMember?.status !== 'INACTIVE',
           memberId: linkedMemberId || '',
           memberCode: linkedMember?.memberCode || '',
-          groupId: linkedMember?.groupId || 'group_001',
+          groupId: linkedMember?.groupId || 'shivshahi_group_001',
           groupName: linkedMember?.groupName || 'Chhatrapati Bachat Gat',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -291,10 +363,14 @@ export const authService = {
           await signOut(auth);
           throw new Error('This account is not registered as a member.');
         }
+        if (reqRole === 'member' && (!linkedMemberId || !linkedMember)) {
+          await signOut(auth);
+          throw new Error('This login is not assigned to a group member. Please contact admin.');
+        }
       }
 
       // 6. Retrieve dynamic group details
-      const groupData = await groupService.getGroupDetails(userData.groupId || 'group_001');
+      const groupData = await groupService.getGroupDetails(userData.groupId || 'shivshahi_group_001');
       const liveGroupName = groupData.group?.groupName || userData.groupName || 'Chhatrapati Bachat Gat';
 
       const resolvedUser = {
@@ -357,7 +433,7 @@ export const authService = {
     }
 
     const userData = userDoc.data();
-    const groupData = await groupService.getGroupDetails(userData.groupId || 'group_001');
+    const groupData = await groupService.getGroupDetails(userData.groupId || 'shivshahi_group_001');
     const liveGroupName = groupData.group?.groupName || userData.groupName || 'Chhatrapati Bachat Gat';
     const userRole = (userData.role || 'member').toLowerCase();
 
@@ -381,7 +457,7 @@ export const authService = {
   /**
    * Update profile info in Firestore (Full Name & Phone Number)
    */
-  updateProfile: async ({ fullName, name, phone }) => {
+  updateProfile: async ({ fullName, name, phone, currentPassword, newPassword }) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       throw new Error('Not authenticated.');
@@ -402,7 +478,15 @@ export const authService = {
       updatePayload.phone = phone.trim();
     }
 
+    if (newPassword) {
+      if (!currentPassword) throw new Error('Current password is required to set a new password.');
+      if (newPassword.length < 6) throw new Error('New password must be at least 6 characters.');
+      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, newPassword);
+    }
+
     await updateDoc(userDocRef, updatePayload);
-    return { success: true, message: 'Profile updated successfully.' };
+    return { success: true, message: newPassword ? 'Profile and password updated successfully.' : 'Profile updated successfully.' };
   },
 };

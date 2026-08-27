@@ -1,20 +1,48 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
 const Modal = ({ isOpen, onClose, title, children, maxWidth = '550px' }) => {
+  const dialogRef = useRef(null);
+  const bodyRef = useRef(null);
+  const previousFocusRef = useRef(null);
+
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') onClose();
+      if (e.key !== 'Tab' || !dialogRef.current) return;
+
+      const elements = Array.from(dialogRef.current.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => element.offsetParent !== null);
+      if (elements.length === 0) return;
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     if (isOpen) {
+      previousFocusRef.current = document.activeElement;
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleKeyDown);
+      requestAnimationFrame(() => {
+        const firstField = bodyRef.current?.querySelector(
+          '[data-autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
+        );
+        firstField?.focus();
+      });
     } else {
       document.body.style.overflow = 'auto';
     }
     return () => {
       document.body.style.overflow = 'auto';
       window.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus?.();
     };
   }, [isOpen, onClose]);
 
@@ -39,7 +67,11 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = '550px' }) => {
       onClick={onClose}
     >
       <div
+        ref={dialogRef}
         className="fade-in"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
         style={{
           background: 'var(--bg-card)',
           borderRadius: 'var(--radius-xl)',
@@ -84,7 +116,7 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = '550px' }) => {
         </div>
 
         {/* Modal Body */}
-        <div style={{ padding: '24px' }}>{children}</div>
+        <div ref={bodyRef} style={{ padding: '24px' }}>{children}</div>
       </div>
     </div>
   );

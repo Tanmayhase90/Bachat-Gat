@@ -7,7 +7,6 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 
 // Pages
 import Login from './pages/Login';
-import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Members from './pages/Members';
 import MemberDetails from './pages/MemberDetails';
@@ -25,7 +24,7 @@ function App() {
           <Routes>
             {/* Public Routes */}
             <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/register" element={<Navigate to="/login" replace />} />
 
             {/* Protected Routes */}
             <Route element={<ProtectedRoute />}>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { reportService } from '../services/dashboardService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
@@ -24,9 +25,11 @@ import {
 
 const Reports = () => {
   const currentDate = new Date();
-  const [activeTab, setActiveTab] = useState('monthly'); // 'monthly' | 'pending' | 'loans'
-  const [selectedMonth, setSelectedMonth] = useState(currentDate.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(currentDate.getFullYear());
+  const location = useLocation();
+  const reportState = location.state || {};
+  const [activeTab, setActiveTab] = useState(reportState.activeTab || 'monthly'); // 'monthly' | 'pending' | 'loans'
+  const [selectedMonth, setSelectedMonth] = useState(reportState.selectedMonth || currentDate.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(reportState.selectedYear || currentDate.getFullYear());
   const [search, setSearch] = useState('');
 
   const [monthlyData, setMonthlyData] = useState(null);

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { authService } from '../services/authService';
 import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const Login = () => {
@@ -8,10 +9,11 @@ const Login = () => {
   const navigate = useNavigate();
   const { login, isAuthenticated, loading: authLoading } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('admin'); // 'admin' | 'member'
+  const [activeTab, setActiveTab] = useState('member'); // 'member' | 'admin'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
 
@@ -63,6 +65,26 @@ const Login = () => {
       setError(err.message || 'Login failed. Please check credentials.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setSuccessInfo('');
+      setError('Please enter your email address first.');
+      return;
+    }
+
+    try {
+      setResetLoading(true);
+      setError('');
+      setSuccessInfo('');
+      const result = await authService.sendPasswordReset(email);
+      setSuccessInfo(result.message);
+    } catch (err) {
+      setError(err.message || 'Unable to send password reset email.');
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -155,28 +177,8 @@ const Login = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#F1F5F9', padding: '4px', borderRadius: 'var(--radius-lg)' }}>
             <button
               type="button"
-              onClick={() => handleTabChange('admin')}
-              style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: activeTab === 'admin' ? '#FFFFFF' : 'transparent',
-                border: activeTab === 'admin' ? '1px solid var(--border-color)' : 'none',
-                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: activeTab === 'admin' ? 'var(--shadow-xs)' : 'none',
-                transition: 'var(--transition)',
-              }}
-            >
-              <ShieldCheck size={16} /> Admin Login
-            </button>
-            <button
-              type="button"
               onClick={() => handleTabChange('member')}
+              aria-pressed={activeTab === 'member'}
               style={{
                 padding: '10px 14px',
                 borderRadius: 'var(--radius-md)',
@@ -194,6 +196,28 @@ const Login = () => {
               }}
             >
               <UserCheck size={16} /> Member Login
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('admin')}
+              aria-pressed={activeTab === 'admin'}
+              style={{
+                padding: '10px 14px',
+                borderRadius: 'var(--radius-md)',
+                background: activeTab === 'admin' ? '#FFFFFF' : 'transparent',
+                border: activeTab === 'admin' ? '1px solid var(--border-color)' : 'none',
+                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text-secondary)',
+                fontSize: '0.875rem',
+                fontWeight: 700,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: activeTab === 'admin' ? 'var(--shadow-xs)' : 'none',
+                transition: 'var(--transition)',
+              }}
+            >
+              <ShieldCheck size={16} /> Admin Login
             </button>
           </div>
         </div>
@@ -272,9 +296,25 @@ const Login = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label" htmlFor={passwordFieldName}>
-              Password
-            </label>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+              <label className="form-label" htmlFor={passwordFieldName}>
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={resetLoading}
+                style={{
+                  background: 'transparent',
+                  color: 'var(--primary)',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  padding: '2px 0',
+                }}
+              >
+                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+              </button>
+            </div>
             <div style={{ position: 'relative' }}>
               <Lock
                 size={18}
@@ -286,7 +326,7 @@ const Login = () => {
                 id={passwordFieldName}
                 name={passwordFieldName}
                 type="password"
-                autoComplete="new-password"
+                autoComplete="current-password"
                 className="form-input"
                 style={{ paddingLeft: '38px' }}
                 placeholder="Enter password"
@@ -308,34 +348,7 @@ const Login = () => {
           </button>
         </form>
 
-        {/* Signup / Register Link */}
-        <div
-          style={{
-            textAlign: 'center',
-            marginTop: '22px',
-            paddingTop: '18px',
-            borderTop: '1px solid var(--border-color)',
-            fontSize: '0.875rem',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Don't have an account?{' '}
-          <Link
-            to="/register"
-            style={{
-              color: 'var(--primary)',
-              fontWeight: 700,
-              textDecoration: 'none',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            Sign Up
-          </Link>
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: '16px', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+        <div style={{ textAlign: 'center', marginTop: '22px', paddingTop: '18px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
           Secure Self Help Group Portal • Bachat Gat 2026
         </div>
       </div>

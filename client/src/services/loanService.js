@@ -8,6 +8,7 @@ import {
   query,
   where,
   onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
@@ -168,6 +169,15 @@ export const loanService = {
       const interestRate = parseFloat(loanData.interest_rate || loanData.interestRate) || 2.0;
       const purpose = (loanData.purpose || 'General').trim();
       const dateStr = loanData.loan_date || loanData.loanDate || new Date().toISOString();
+      const durationMonths = parseInt(loanData.duration_months || loanData.durationMonths, 10) || 12;
+
+      if (!memberId || !Number.isFinite(principal) || principal <= 0) {
+        throw new Error('A valid member and principal amount are required.');
+      }
+      const selectedMemberSnap = await getDoc(doc(db, 'groups', targetGroupId, 'members', memberId));
+      if (!selectedMemberSnap.exists() || selectedMemberSnap.data().isActive === false || (selectedMemberSnap.data().status || 'active').toLowerCase() === 'inactive') {
+        throw new Error('The selected member is not active or no longer exists.');
+      }
 
       const loanId = `L_${Date.now()}`;
       const loanDocRef = doc(db, 'groups', targetGroupId, 'loans', loanId);
@@ -180,6 +190,7 @@ export const loanService = {
         originalPrincipal: principal,
         pendingPrincipal: principal,
         interestRate,
+        durationMonths,
         purpose,
         status: 'active',
         issueDate: dateStr,
@@ -255,6 +266,7 @@ export const loanService = {
       const month = parseInt(repayData.payment_month || repayData.month, 10) || (new Date().getMonth() + 1);
       const year = parseInt(repayData.payment_year || repayData.year, 10) || new Date().getFullYear();
       const mode = repayData.payment_mode || repayData.paymentMode || 'UPI';
+      const remarks = (repayData.remarks || '').trim();
 
       const loanDocRef = doc(db, 'groups', targetGroupId, 'loans', loanId);
       const loanSnap = await getDoc(loanDocRef);
@@ -265,6 +277,8 @@ export const loanService = {
 
       const loanData = loanSnap.data();
       const currentPending = Number(loanData.pendingPrincipal || loanData.remainingAmount || 0);
+      if ((loanData.status || 'active').toLowerCase() !== 'active') throw new Error('This loan is already closed.');
+      if (principalRepay < 0 || principalRepay > currentPending) throw new Error('Principal repayment is outside the valid outstanding balance.');
       const interestRate = Number(loanData.interestRate || 2.0);
       const calculatedInterest = Math.round(((currentPending * interestRate) / 100) * 100) / 100;
       const totalPayment = principalRepay + calculatedInterest + regularHafta;
@@ -299,8 +313,29 @@ export const loanService = {
         status: 'paid',
         paymentDate,
         paymentMode: mode,
+        notes: remarks,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
+
+      // Keep an immutable repayment ledger in its own collection. The monthly
+      // contribution document remains the aggregate used by dashboard reports.
+      const repaymentId = `REP_${loanId}_${Date.now()}`;
+      await setDoc(doc(db, 'groups', targetGroupId, 'repayments', repaymentId), {
+        id: repaymentId,
+        groupId: targetGroupId,
+        loanId,
+        memberId,
+        principalAmount: principalRepay,
+        interestAmount: calculatedInterest,
+        regularHaftaAmount: regularHafta,
+        amount: totalPayment,
+        paymentMonth: month,
+        paymentYear: year,
+        paymentDate,
+        paymentMode: mode,
+        remarks,
+        createdAt: serverTimestamp(),
+      });
 
       // Fetch member name for logging
       let memberName = 'Member';
@@ -349,6 +384,7 @@ export const loanService = {
         message: 'Repayment recorded successfully in Bachat Gat',
         newOutstanding: newPending,
         loanStatus: newStatus,
+        repaymentId,
       };
     } catch (err) {
       console.error('Failed to record repayment in Firestore:', err);

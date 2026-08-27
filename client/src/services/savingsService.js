@@ -102,6 +102,14 @@ export const savingsService = {
 
       const docId = `C_${memberId}_${year}_${String(month).padStart(2, '0')}`;
       const docRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', docId);
+      const existingContribution = await getDoc(docRef);
+      if (existingContribution.exists()) {
+        const existingData = existingContribution.data();
+        const alreadyPaid = Number(existingData.paidAmount || existingData.regularHaftaAmount || 0);
+        if (alreadyPaid > 0) {
+          throw new Error(`Savings for ${month}/${year} are already recorded for this member.`);
+        }
+      }
 
       const contributionPayload = {
         id: docId,

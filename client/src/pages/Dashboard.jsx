@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
+  ChevronRight,
 } from 'lucide-react';
 
 const Dashboard = () => {
@@ -107,6 +108,21 @@ const Dashboard = () => {
   const safeActiveLoansCount = summary?.activeLoansCount ?? 0;
   const safeTotalInterest = summary?.totalInterest ?? 0;
   const safeAvailableBalance = summary?.availableBalance ?? 0;
+  const pendingMembers = Array.isArray(progress?.pendingMembers) ? progress.pendingMembers : [];
+  const expectedPendingAmount = pendingMembers.reduce(
+    (total, member) => total + Number(member.expectedAmount || 0),
+    0
+  );
+
+  const openPendingReport = () => {
+    navigate('/reports', {
+      state: {
+        activeTab: 'pending',
+        selectedMonth,
+        selectedYear,
+      },
+    });
+  };
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
@@ -246,8 +262,17 @@ const Dashboard = () => {
         <h2 style={{ fontSize: '1.2rem', marginBottom: '14px' }}>Quick Actions</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px' }}>
           <div
-            className="card"
+            className="card keyboard-card"
+            role="link"
+            tabIndex={0}
             onClick={() => navigate('/members')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate('/members');
+              }
+            }}
+            aria-label="Open members"
             style={{
               cursor: 'pointer',
               display: 'flex',
@@ -268,8 +293,17 @@ const Dashboard = () => {
 
           {isAdmin && (
             <div
-              className="card"
+              className="card keyboard-card"
+              role="button"
+              tabIndex={0}
               onClick={openRecordSavings}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openRecordSavings();
+                }
+              }}
+              aria-label="Add monthly savings"
               style={{
                 cursor: 'pointer',
                 display: 'flex',
@@ -290,8 +324,17 @@ const Dashboard = () => {
           )}
 
           <div
-            className="card"
+            className="card keyboard-card"
+            role="link"
+            tabIndex={0}
             onClick={() => navigate('/loans')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate('/loans');
+              }
+            }}
+            aria-label="Open loans and repayments"
             style={{
               cursor: 'pointer',
               display: 'flex',
@@ -311,8 +354,17 @@ const Dashboard = () => {
           </div>
 
           <div
-            className="card"
+            className="card keyboard-card"
+            role="link"
+            tabIndex={0}
             onClick={() => navigate('/reports')}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                navigate('/reports');
+              }
+            }}
+            aria-label="Open reports"
             style={{
               cursor: 'pointer',
               display: 'flex',
@@ -336,7 +388,7 @@ const Dashboard = () => {
       {/* MONTHLY SAVINGS PROGRESS & RECENT ACTIVITY GRID */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }} className="dash-two-col">
         {/* Monthly Savings Progress Card */}
-        <div className="card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        <div className="card dashboard-progress-card" style={{ display: 'flex', flexDirection: 'column' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
               <div>
@@ -408,30 +460,49 @@ const Dashboard = () => {
                   </span>
                 </div>
 
-                {/* Pending Members Pill List */}
-                {Array.isArray(progress.pendingMembers) && progress.pendingMembers.length > 0 && (
-                  <div style={{ marginTop: '20px', background: '#FFF5F8', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(194, 24, 91, 0.15)' }}>
-                    <div style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--primary)', marginBottom: '8px' }}>
-                      MEMBERS PENDING FOR THIS MONTH ({progress.pendingMembers.length}):
+                {/* Compact pending preview. Full list lives in Reports. */}
+                {pendingMembers.length > 0 ? (
+                  <div style={{ marginTop: '18px', background: '#FFF5F8', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(194, 24, 91, 0.15)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
+                        <div style={{ width: '34px', height: '34px', borderRadius: '10px', background: '#FFFFFF', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(239, 68, 68, 0.18)' }}>
+                          <AlertCircle size={17} />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)' }}>Pending Collections</div>
+                          <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>Expected: {formatCurrency(expectedPendingAmount)}</div>
+                        </div>
+                      </div>
+                      <span className="badge badge-danger">{pendingMembers.length} Pending</span>
                     </div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                      {progress.pendingMembers.map((pm) => (
-                        <span
-                          key={pm.member_id || pm.name}
-                          style={{
-                            background: '#FFFFFF',
-                            border: '1px solid var(--border-color)',
-                            padding: '3px 8px',
-                            borderRadius: 'var(--radius-full)',
-                            fontSize: '0.75rem',
-                            fontWeight: 600,
-                            color: 'var(--text-secondary)',
-                          }}
-                        >
-                          {pm.name}
-                        </span>
-                      ))}
+
+                    <div className="progress-members-grid">
+                      <div className="progress-member-stat">
+                        <span>Paid</span>
+                        <strong style={{ color: 'var(--success-text)' }}>{progress.membersPaid || 0}</strong>
+                      </div>
+                      <div className="progress-member-stat">
+                        <span>Pending</span>
+                        <strong style={{ color: 'var(--danger-text)' }}>{pendingMembers.length}</strong>
+                      </div>
+                      <div className="progress-member-stat">
+                        <span>Total</span>
+                        <strong>{progress.totalActiveMembers || 0}</strong>
+                      </div>
                     </div>
+
+                    <button
+                      type="button"
+                      className="btn-outline"
+                      onClick={openPendingReport}
+                      style={{ width: '100%', marginTop: '12px', padding: '8px 14px' }}
+                    >
+                      View All Pending Members <ChevronRight size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: '18px', padding: '14px', borderRadius: 'var(--radius-md)', background: 'var(--success-light)', color: 'var(--success-text)', display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.85rem' }}>
+                    <CheckCircle2 size={18} /> All active members have paid for this month.
                   </div>
                 )}
               </div>
@@ -440,13 +511,13 @@ const Dashboard = () => {
         </div>
 
         {/* Recent Activity Card */}
-        <div className="card">
+        <div className="card dashboard-activity-card" style={{ display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
             <h2 style={{ fontSize: '1.15rem' }}>Recent Activity</h2>
             <Clock size={18} color="var(--text-muted)" />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '380px', overflowY: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px' }}>
             {(!activities || activities.length === 0) ? (
               <div style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                 No recent activity recorded.
@@ -482,7 +553,7 @@ const Dashboard = () => {
                     <ArrowUpRight size={16} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <div className="activity-description" style={{ fontSize: '0.85rem', color: 'var(--text-primary)', fontWeight: 500 }}>
                       {act.description}
                     </div>
                     <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '2px' }}>

@@ -7,6 +7,7 @@ import EmptyState from '../components/common/EmptyState';
 import RecordSavingsModal from '../components/forms/RecordSavingsModal';
 import CreateLoanModal from '../components/forms/CreateLoanModal';
 import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
+import EditMemberLoginModal from '../components/forms/EditMemberLoginModal';
 import {
   formatCurrency,
   formatNumber,
@@ -29,6 +30,8 @@ import {
   Shield,
   Edit2,
   Save,
+  Trash2,
+  KeyRound,
 } from 'lucide-react';
 
 const MemberDetails = () => {
@@ -49,6 +52,7 @@ const MemberDetails = () => {
   const [isSavingsOpen, setIsSavingsOpen] = useState(false);
   const [isLoanOpen, setIsLoanOpen] = useState(false);
   const [isRepayOpen, setIsRepayOpen] = useState(false);
+  const [isMemberLoginOpen, setIsMemberLoginOpen] = useState(false);
   const [selectedLoanId, setSelectedLoanId] = useState(null);
 
   const fetchMember = async () => {
@@ -82,6 +86,21 @@ const MemberDetails = () => {
       console.error('Failed to update role:', err);
     } finally {
       setUpdatingRole(false);
+    }
+  };
+
+  const handleDeleteMember = async () => {
+    const ok = window.confirm(`Delete member "${member.name}" permanently? This cannot be undone.`);
+    if (!ok) return;
+
+    try {
+      const res = await memberService.deleteMember(id);
+      if (res.success) {
+        navigate('/members');
+      }
+    } catch (err) {
+      console.error('Failed to delete member:', err);
+      alert(err.message || 'Failed to delete member.');
     }
   };
 
@@ -172,7 +191,6 @@ const MemberDetails = () => {
                     <option value="MEMBER">MEMBER</option>
                     <option value="TREASURER">TREASURER</option>
                     <option value="SECRETARY">SECRETARY</option>
-                    <option value="ADMIN">ADMIN</option>
                   </select>
                   <button
                     onClick={handleUpdateRole}
@@ -235,6 +253,20 @@ const MemberDetails = () => {
           {canManageLoans && (
             <button onClick={() => setIsLoanOpen(true)} className="btn-primary">
               <HandCoins size={16} /> + Issue Loan
+            </button>
+          )}
+          {canManageMembers && (
+            <button onClick={() => setIsMemberLoginOpen(true)} className="btn-outline">
+              <KeyRound size={16} /> Edit / Add Login
+            </button>
+          )}
+          {canManageMembers && (
+            <button
+              onClick={handleDeleteMember}
+              className="btn-outline"
+              style={{ color: 'var(--danger-text)', borderColor: 'var(--danger)' }}
+            >
+              <Trash2 size={16} /> Delete Member
             </button>
           )}
         </div>
@@ -466,7 +498,7 @@ const MemberDetails = () => {
         isOpen={isLoanOpen}
         onClose={() => setIsLoanOpen(false)}
         onSuccess={fetchMember}
-        initialMemberId={parseInt(id, 10)}
+        initialMemberId={id}
       />
 
       <RecordRepaymentModal
@@ -477,6 +509,13 @@ const MemberDetails = () => {
         }}
         onSuccess={fetchMember}
         initialLoanId={selectedLoanId}
+      />
+
+      <EditMemberLoginModal
+        isOpen={isMemberLoginOpen}
+        onClose={() => setIsMemberLoginOpen(false)}
+        onSuccess={fetchMember}
+        member={member}
       />
     </div>
   );

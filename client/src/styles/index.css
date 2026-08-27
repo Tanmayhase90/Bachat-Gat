@@ -134,9 +134,30 @@ a {
   transition: var(--transition);
 }
 
+.sidebar {
+  transform: translateX(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-close {
+  display: none !important;
+}
+
 @media (max-width: 992px) {
   .main-content {
     margin-left: 0;
+  }
+
+  .sidebar {
+    transform: translateX(-100%);
+  }
+
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: flex !important;
   }
 }
 
@@ -230,6 +251,15 @@ a {
   transform: translateY(0);
 }
 
+.btn-primary:disabled,
+.btn-secondary:disabled,
+.btn-outline:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
 .btn-secondary {
   background: var(--bg-subtle);
   color: var(--text-primary);
@@ -290,9 +320,40 @@ a {
   font-size: 0.95rem;
 }
 
+.form-grid-2,
+.form-grid-3 {
+  display: grid;
+  gap: 12px;
+}
+
+.form-grid-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form-grid-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .form-input:focus, .form-select:focus, .form-textarea:focus {
   border-color: var(--border-focus);
   box-shadow: 0 0 0 3px rgba(190, 24, 93, 0.15);
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="link"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 3px solid rgba(190, 24, 93, 0.35);
+  outline-offset: 2px;
+}
+
+.keyboard-card:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(190, 24, 93, 0.14), var(--shadow-md);
 }
 
 /* Animations */
@@ -311,6 +372,7 @@ a {
   gap: 8px;
   border-bottom: 2px solid var(--border-color);
   margin-bottom: 24px;
+  overflow-x: auto;
 }
 
 .tab-btn {
@@ -324,6 +386,7 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 
 .tab-btn.active {
@@ -365,4 +428,91 @@ a {
 
 .custom-table tbody tr:hover {
   background-color: #FAFAFA;
+}
+
+.dashboard-progress-card,
+.dashboard-activity-card {
+  height: 430px;
+  align-self: start;
+  width: 100%;
+  overflow: hidden;
+}
+
+.progress-members-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.progress-member-stat {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.progress-member-stat strong {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.activity-description {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .page-body {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 16px;
+    border-radius: var(--radius-md);
+  }
+
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .custom-table th,
+  .custom-table td {
+    padding: 10px 12px;
+    white-space: nowrap;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline {
+    min-height: 42px;
+  }
+
+  .dashboard-progress-card,
+  .dashboard-activity-card {
+    height: auto;
+    min-height: 360px;
+  }
+
+  .progress-members-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .dashboard-progress-card,
+  .dashboard-activity-card {
+    height: auto;
+    min-height: 380px;
+  }
 }

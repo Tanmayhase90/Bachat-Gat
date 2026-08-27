@@ -8,7 +8,8 @@
     "build": "cd client && npm run build",
     "preview": "cd client && npm run preview",
     "admin:create": "node scripts/create-admin.js",
-    "firebase:seed": "node database/seed-firebase.js"
+    "firebase:seed": "node database/seed-firebase.js",
+    "firebase:test-workflow": "node scripts/test-full-workflow.js"
   },
   "keywords": ["bachat-gat", "microfinance", "react", "firebase", "firestore"],
   "author": "Internship Project",

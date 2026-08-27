@@ -143,7 +143,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
 
         <div className="form-group">
           <label className="form-label">Select Active Loan *</label>
-          <select name="loan_id" className="form-select" value={formData.loan_id} onChange={handleChange} required>
+          <select name="loan_id" className="form-select" value={formData.loan_id} onChange={handleChange} tabIndex={0} data-autofocus required>
             <option value="">-- Select Active Loan --</option>
             {activeLoans.map((l) => (
               <option key={l.id} value={l.id}>
@@ -155,15 +155,13 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
 
         {selectedLoan && (
           <div
+            className="form-grid-3"
             style={{
               padding: '12px 16px',
               borderRadius: 'var(--radius-md)',
               background: '#F8FAFC',
               border: '1px solid var(--border-color)',
               marginBottom: '16px',
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr',
-              gap: '8px',
               textAlign: 'center',
             }}
           >
@@ -182,10 +180,10 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
           </div>
         )}
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label className="form-label">Month *</label>
-            <select name="payment_month" className="form-select" value={formData.payment_month} onChange={handleChange} required>
+            <select name="payment_month" className="form-select" value={formData.payment_month} onChange={handleChange} tabIndex={0} required>
               {months.map((m) => (
                 <option key={m.value} value={m.value}>
                   {m.label}
@@ -202,6 +200,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               className="form-input"
               value={formData.payment_year}
               onChange={handleChange}
+              tabIndex={0}
               min="2020"
               max="2040"
               required
@@ -209,7 +208,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label className="form-label">Regular Hafta Amount (₹)</label>
             <input
@@ -218,6 +217,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               className="form-input"
               value={formData.regular_hafta_amount}
               onChange={handleChange}
+              tabIndex={0}
               min="0"
               step="50"
             />
@@ -230,6 +230,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
                 <button
                   type="button"
                   onClick={handleSetFullRepayment}
+                  tabIndex={0}
                   style={{ background: 'none', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 600, textDecoration: 'underline' }}
                 >
                   Pay Full
@@ -242,6 +243,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               className="form-input"
               value={formData.principal_repayment_amount}
               onChange={handleChange}
+              tabIndex={0}
               min="0"
               max={currentOutstanding}
               step="10"
@@ -292,7 +294,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label className="form-label">Payment Date</label>
             <input
@@ -301,12 +303,13 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               className="form-input"
               value={formData.payment_date}
               onChange={handleChange}
+              tabIndex={0}
             />
           </div>
 
           <div className="form-group">
             <label className="form-label">Payment Mode</label>
-            <select name="payment_mode" className="form-select" value={formData.payment_mode} onChange={handleChange}>
+            <select name="payment_mode" className="form-select" value={formData.payment_mode} onChange={handleChange} tabIndex={0}>
               <option value="UPI">UPI / QR Code</option>
               <option value="CASH">Cash</option>
               <option value="BANK_TRANSFER">Bank Transfer / NEFT</option>
@@ -324,14 +327,15 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
             placeholder="e.g. Received via GPay, receipt #104"
             value={formData.remarks}
             onChange={handleChange}
+            tabIndex={0}
           />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '20px' }}>
-          <button type="button" onClick={onClose} className="btn-secondary">
+          <button type="button" onClick={onClose} className="btn-secondary" tabIndex={0}>
             Cancel
           </button>
-          <button type="submit" className="btn-primary" disabled={loading || !selectedLoan}>
+          <button type="submit" className="btn-primary" disabled={loading || !selectedLoan} tabIndex={0}>
             <CreditCard size={16} />
             {loading ? 'Recording...' : 'Record Payment'}
           </button>

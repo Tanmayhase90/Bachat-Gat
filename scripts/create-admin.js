@@ -15,12 +15,14 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initializeApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { getFirestore, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { createRequire } from 'module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(new URL('../client/package.json', import.meta.url));
+const { initializeApp } = require('firebase/app');
+const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } = require('firebase/auth');
+const { getFirestore, doc, setDoc, serverTimestamp } = require('firebase/firestore');
 
 // Helper to parse client/.env if process.env is empty
 function loadEnv() {
@@ -103,7 +105,7 @@ async function createAdmin() {
       role: 'admin',
       role_name: 'ADMIN',
       isActive: true,
-      groupId: 'group_001',
+      groupId: 'shivshahi_group_001',
       groupName: 'Chhatrapati Bachat Gat',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -112,9 +114,9 @@ async function createAdmin() {
     console.log(`✔ Firestore document created/updated in users/${uid} with role: "admin"`);
 
     // 3. Ensure Default Group document exists
-    const groupDocRef = doc(db, 'groups', 'group_001');
+    const groupDocRef = doc(db, 'groups', 'shivshahi_group_001');
     await setDoc(groupDocRef, {
-      groupId: 'group_001',
+      groupId: 'shivshahi_group_001',
       groupName: 'Chhatrapati Bachat Gat',
       group_name: 'Chhatrapati Bachat Gat',
       groupCode: 'shivshahi_group_001',
@@ -129,7 +131,7 @@ async function createAdmin() {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
-    console.log(`✔ Default Group document verified in groups/group_001`);
+    console.log(`✔ Default Group document verified in groups/shivshahi_group_001`);
     console.log(`\n🎉 Admin user creation completed successfully!`);
     console.log(`   You can now log in via the "Admin Login" tab with:\n   Email: ${email}\n   Password: ${password}\n`);
     process.exit(0);

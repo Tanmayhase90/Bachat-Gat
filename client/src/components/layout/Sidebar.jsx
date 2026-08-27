@@ -40,6 +40,7 @@ const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
       )}
 
       <aside
+        className={`sidebar ${isMobileOpen ? 'sidebar-open' : ''}`}
         style={{
           width: 'var(--sidebar-width)',
           backgroundColor: '#FFFFFF',
@@ -52,8 +53,6 @@ const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
           bottom: 0,
           left: 0,
           zIndex: 999,
-          transform: isMobileOpen || window.innerWidth > 992 ? 'translateX(0)' : 'translateX(-100%)',
-          transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {/* Top Branding */}
@@ -97,9 +96,9 @@ const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
 
             {/* Mobile Close Button */}
             <button
+              className="sidebar-close"
               onClick={onCloseMobile}
               style={{
-                display: window.innerWidth <= 992 ? 'flex' : 'none',
                 background: 'transparent',
                 color: 'var(--text-secondary)',
                 padding: '4px',

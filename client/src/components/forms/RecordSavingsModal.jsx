@@ -84,7 +84,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
         }, 1200);
       }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to record savings.');
+      setError(err.response?.data?.message || err.message || 'Failed to record savings.');
     } finally {
       setLoading(false);
     }
@@ -121,7 +121,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
 
         <div className="form-group">
           <label className="form-label">Select Member *</label>
-          <select name="member_id" className="form-select" value={formData.member_id} onChange={handleChange} required>
+          <select name="member_id" className="form-select" value={formData.member_id} onChange={handleChange} data-autofocus required>
             <option value="">-- Choose Member --</option>
             {members.map((m) => (
               <option key={m.member_id} value={m.member_id}>
@@ -131,7 +131,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
           </select>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label className="form-label">Month *</label>
             <select name="month" className="form-select" value={formData.month} onChange={handleChange} required>
@@ -158,7 +158,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div className="form-grid-2">
           <div className="form-group">
             <label className="form-label">Contribution Amount (₹) *</label>
             <input

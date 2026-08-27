@@ -9,17 +9,19 @@ import {
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { loanService } from './loanService';
+import { DEFAULT_GROUP_ID } from '../utils/formatters';
 
 export const repaymentService = {
   /**
    * Get all repayments across all loans with member and loan info
    */
-  getAllRepayments: async () => {
+  getAllRepayments: async (groupId = DEFAULT_GROUP_ID) => {
     try {
+      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
       const [repaymentsSnap, membersSnap, loansSnap] = await Promise.all([
-        getDocs(collection(db, 'repayments')),
-        getDocs(collection(db, 'members')),
-        getDocs(collection(db, 'loans')),
+        getDocs(collection(db, 'groups', targetGroupId, 'repayments')),
+        getDocs(collection(db, 'groups', targetGroupId, 'members')),
+        getDocs(collection(db, 'groups', targetGroupId, 'loans')),
       ]);
 
       const membersMap = {};
@@ -77,16 +79,17 @@ export const repaymentService = {
   /**
    * Record a loan repayment
    */
-  recordRepayment: async (loanId, data) => {
-    return await loanService.recordRepayment(loanId, data);
+  recordRepayment: async (loanId, data, groupId = DEFAULT_GROUP_ID) => {
+    return await loanService.recordRepayment({ ...data, loanId }, groupId);
   },
 
   /**
    * Subscribe to repayments in real-time
    */
-  subscribeToRepayments: (callback) => {
-    return onSnapshot(collection(db, 'repayments'), () => {
-      repaymentService.getAllRepayments().then((res) => {
+  subscribeToRepayments: (callback, groupId = DEFAULT_GROUP_ID) => {
+    const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+    return onSnapshot(collection(db, 'groups', targetGroupId, 'repayments'), () => {
+      repaymentService.getAllRepayments(targetGroupId).then((res) => {
         if (res.success) callback(res.repayments);
       });
     });

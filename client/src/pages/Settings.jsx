@@ -119,12 +119,12 @@ const Settings = () => {
 
       const res = await authService.updateProfile(payload);
       if (res.success) {
-        setMessage({ type: 'success', text: 'Profile updated successfully!' });
+        setMessage({ type: 'success', text: res.message || 'Profile updated successfully!' });
         setProfileData((prev) => ({ ...prev, currentPassword: '', newPassword: '' }));
         await refreshUser();
       }
     } catch (err) {
-      setMessage({ type: 'error', text: err.response?.data?.message || 'Failed to update profile.' });
+      setMessage({ type: 'error', text: err.response?.data?.message || err.message || 'Failed to update profile.' });
     } finally {
       setSaving(false);
     }
@@ -212,7 +212,7 @@ const Settings = () => {
               <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Group code cannot be altered.</span>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+            <div className="form-grid-2">
               <div className="form-group">
                 <label className="form-label">Monthly Share Contribution (₹) *</label>
                 <input
@@ -312,7 +312,7 @@ const Settings = () => {
                 <Lock size={16} /> Change Password (Optional)
               </h3>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+              <div className="form-grid-2">
                 <div className="form-group">
                   <label className="form-label">Current Password</label>
                   <input

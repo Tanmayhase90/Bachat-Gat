@@ -51,7 +51,7 @@ export function calculateMonthlySavingsProgress({
   const pendingMembers = Math.max(0, safeTotal - safePaid);
   const expectedPending = pendingMembers * safeShare;
   const completionPercentage = monthlyTarget > 0
-    ? Math.round(((collectedAmount / monthlyTarget) * 100) * 100) / 100
+    ? Math.min(100, Math.round(((collectedAmount / monthlyTarget) * 100) * 100) / 100)
     : 0;
 
   return {

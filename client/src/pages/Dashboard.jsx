@@ -444,7 +444,7 @@ const Dashboard = () => {
                   <div>
                     <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>COLLECTED AMOUNT</span>
                     <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--primary)' }}>
-                      {formatCurrency(progress.collectedAmount)}
+                      {formatCurrency(progress.targetAmount || progress.monthlyTarget ? Math.min(progress.collectedAmount, (progress.targetAmount || progress.monthlyTarget)) : progress.collectedAmount)}
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>

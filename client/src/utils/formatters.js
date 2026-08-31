@@ -201,7 +201,8 @@ export function calculateMonthlyMemberStatus({
         : 0))
     );
     const pStatus = (p.status || '').toLowerCase();
-    return pMemId === memberId && pMonth === m && pYear === y && (pStatus === 'paid' || pPaid > 0);
+    const isBase = p.isBase || p.type === 'BASE_SAVINGS' || pMonth === 0 || p.notes?.toLowerCase().includes('opening') || p.remarks?.toLowerCase().includes('opening');
+    return !isBase && pMemId === memberId && pMonth === m && pYear === y && (pStatus === 'paid' || pPaid > 0);
   });
 
   const amountPaid = memberPayments.reduce((sum, p) => {
@@ -283,7 +284,7 @@ export function calculateMonthlyMemberStatuses({
   const collectedAmount = statuses.reduce((sum, s) => sum + s.amountPaid, 0);
   const monthlyTarget = statuses.reduce((sum, s) => sum + s.requiredAmount, 0);
   const pendingAmount = pendingMembers.reduce((sum, s) => sum + s.currentDues, 0);
-  const progressPercentage = monthlyTarget > 0 ? Math.round(((collectedAmount / monthlyTarget) * 100) * 100) / 100 : 0;
+  const progressPercentage = monthlyTarget > 0 ? Math.min(100, Math.round(((collectedAmount / monthlyTarget) * 100) * 100) / 100) : 0;
 
   return {
     month: m,
@@ -346,7 +347,9 @@ export const normalizeSavings = (id, data = {}) => {
     member_name: data.memberName || data.member_name || data.name || data.fullName || 'Member',
     memberCode: data.memberCode || data.member_code || memberId,
     member_code: data.memberCode || data.member_code || memberId,
-    month: parseInt(data.month, 10) || (new Date().getMonth() + 1),
+    month: data.month !== undefined && data.month !== null && !isNaN(parseInt(data.month, 10))
+      ? parseInt(data.month, 10)
+      : (new Date().getMonth() + 1),
     year: parseInt(data.year, 10) || new Date().getFullYear(),
     expectedAmount,
     regularHaftaAmount: expectedAmount,

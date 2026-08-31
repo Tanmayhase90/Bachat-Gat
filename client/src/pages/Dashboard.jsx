@@ -76,6 +76,16 @@ const Dashboard = () => {
         setSummary(liveData.summary);
         if (liveData.memberSummary) setMemberSummary(liveData.memberSummary);
       }
+      dashboardService.getMonthlyProgress(selectedMonth, selectedYear, 'shivshahi_group_001').then((pRes) => {
+        if (pRes?.success && pRes.progress) {
+          setProgress(pRes.progress);
+        }
+      });
+      dashboardService.getRecentActivities(8, 'shivshahi_group_001').then((aRes) => {
+        if (aRes?.success && aRes.activities) {
+          setActivities(aRes.activities);
+        }
+      });
     });
 
     return () => {
@@ -108,14 +118,19 @@ const Dashboard = () => {
   const safeActiveLoansCount = summary?.activeLoansCount ?? 0;
   const safeTotalInterest = summary?.totalInterest ?? 0;
   const safeAvailableBalance = summary?.availableBalance ?? 0;
-  const pendingMembers = Array.isArray(progress?.pendingMembers) ? progress.pendingMembers : [];
-  const expectedPendingAmount = pendingMembers.reduce(
-    (total, member) => total + Number(member.expectedAmount || 0),
-    0
-  );
+  const pendingCount = progress?.pendingMembersCount !== undefined
+    ? progress.pendingMembersCount
+    : (Array.isArray(progress?.pendingMembers) ? progress.pendingMembers.length : 0);
+  const paidCount = progress?.paidMembers !== undefined
+    ? progress.paidMembers
+    : (progress?.membersPaid || 0);
+  const totalCount = progress?.totalMembers !== undefined
+    ? progress.totalMembers
+    : (progress?.totalActiveMembers || 368);
+  const expectedPendingAmount = progress?.expectedPending ?? progress?.expectedPendingAmount ?? (pendingCount * (progress?.monthlyShare || 1000));
 
   const openPendingReport = () => {
-    navigate('/reports', {
+    navigate('/members', {
       state: {
         activeTab: 'pending',
         selectedMonth,
@@ -149,7 +164,7 @@ const Dashboard = () => {
             {formatCurrency(safeTotalGroupFund)}
           </h1>
           <p style={{ color: 'rgba(255, 255, 255, 0.85)', fontSize: '0.95rem' }}>
-            Total Group Fund (Total Savings {formatCurrency(safeTotalSavings)} + Interest {formatCurrency(safeTotalInterest)})
+            Total Group Fund (Member Contributions {formatCurrency(safeTotalSavings)} + Earned Interest {formatCurrency(safeTotalInterest)})
           </p>
         </div>
 
@@ -460,8 +475,8 @@ const Dashboard = () => {
                   </span>
                 </div>
 
-                {/* Compact pending preview. Full list lives in Reports. */}
-                {pendingMembers.length > 0 ? (
+                {/* Pending Collections or All Paid State */}
+                {pendingCount > 0 ? (
                   <div style={{ marginTop: '18px', background: '#FFF5F8', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(194, 24, 91, 0.15)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginBottom: '12px', flexWrap: 'wrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '9px' }}>
@@ -473,21 +488,21 @@ const Dashboard = () => {
                           <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>Expected: {formatCurrency(expectedPendingAmount)}</div>
                         </div>
                       </div>
-                      <span className="badge badge-danger">{pendingMembers.length} Pending</span>
+                      <span className="badge badge-danger">{pendingCount} Pending</span>
                     </div>
 
                     <div className="progress-members-grid">
                       <div className="progress-member-stat">
                         <span>Paid</span>
-                        <strong style={{ color: 'var(--success-text)' }}>{progress.membersPaid || 0}</strong>
+                        <strong style={{ color: 'var(--success-text)' }}>{paidCount}</strong>
                       </div>
                       <div className="progress-member-stat">
                         <span>Pending</span>
-                        <strong style={{ color: 'var(--danger-text)' }}>{pendingMembers.length}</strong>
+                        <strong style={{ color: 'var(--danger-text)' }}>{pendingCount}</strong>
                       </div>
                       <div className="progress-member-stat">
                         <span>Total</span>
-                        <strong>{progress.totalActiveMembers || 0}</strong>
+                        <strong>{totalCount}</strong>
                       </div>
                     </div>
 

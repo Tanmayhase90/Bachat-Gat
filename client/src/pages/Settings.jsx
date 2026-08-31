@@ -220,8 +220,8 @@ const Settings = () => {
                   className="form-input"
                   value={groupData.monthly_contribution_per_share}
                   onChange={(e) => setGroupData({ ...groupData, monthly_contribution_per_share: e.target.value })}
-                  min="100"
-                  step="50"
+                  min="1"
+                  step="1"
                   required
                 />
               </div>
@@ -234,7 +234,7 @@ const Settings = () => {
                   value={groupData.monthly_target}
                   onChange={(e) => setGroupData({ ...groupData, monthly_target: e.target.value })}
                   min="0"
-                  step="1000"
+                  step="1"
                 />
               </div>
             </div>

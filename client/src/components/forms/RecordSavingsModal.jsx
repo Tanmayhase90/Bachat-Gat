@@ -50,7 +50,8 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
       if (name === 'member_id') {
         const selected = members.find((m) => String(m.member_id) === String(value) || String(m.id) === String(value));
         if (selected) {
-          updated.amount = selected.monthly_contribution.toString();
+          const defaultShare = Number(selected.monthly_contribution || selected.monthlyContribution || selected.monthly_share || selected.monthlyShare || 1000);
+          updated.amount = (selected.current_due !== undefined && selected.current_due > 0 ? selected.current_due : defaultShare).toString();
         }
       }
       return updated;
@@ -60,8 +61,9 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.member_id || !formData.amount || !formData.month || !formData.year) {
-      setError('Please fill in all mandatory fields.');
+    const numAmount = parseFloat(formData.amount);
+    if (!formData.member_id || isNaN(numAmount) || numAmount <= 0 || !formData.month || !formData.year) {
+      setError('Please enter a valid contribution amount greater than 0.');
       return;
     }
 
@@ -70,7 +72,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
       setError('');
       const res = await savingsService.recordSavings({
         ...formData,
-        amount: parseFloat(formData.amount),
+        amount: numAmount,
         month: parseInt(formData.month, 10),
         year: parseInt(formData.year, 10),
       });
@@ -168,7 +170,7 @@ const RecordSavingsModal = ({ isOpen, onClose, onSuccess, initialMemberId = null
               value={formData.amount}
               onChange={handleChange}
               min="1"
-              step="50"
+              step="1"
               required
             />
           </div>

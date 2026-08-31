@@ -31,7 +31,20 @@ export const reportService = {
       ]);
 
       const group = groupRes.group || {};
-      const monthlyTarget = group.monthlyTarget || 363000;
+      const defaultMonthlyShare = Number(group.monthlyContribution || 1000);
+
+      // Map active member payment statuses
+      const allMembers = membersSnap.docs.map((d) => normalizeMember(d.id, d.data()));
+      const activeMembers = allMembers.filter((mem) => {
+        const s = (mem.status || 'ACTIVE').toUpperCase();
+        return mem.isActive !== false && s === 'ACTIVE';
+      });
+
+      // Dynamically auto-calculate monthly target from active members
+      const monthlyTarget = activeMembers.reduce((acc, mem) => {
+        const share = Number(mem.monthlyContribution || defaultMonthlyShare);
+        return acc + (share > 0 ? share : defaultMonthlyShare);
+      }, 0);
 
       // Filter contributions for selected month and year
       const monthContributions = contributionsSnap.docs
@@ -45,19 +58,25 @@ export const reportService = {
 
       // Active loans outstanding calculation
       const loansList = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
-      const activeLoansDocs = loansList.filter((l) => l.status === 'ACTIVE' && l.pendingPrincipal > 0);
-      const outstandingPrincipal = activeLoansDocs.reduce((acc, l) => acc + (l.pendingPrincipal || 0), 0);
+      const activeLoansDocs = loansList.filter((l) => {
+        const s = (l.status || '').toUpperCase();
+        const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+        return s === 'ACTIVE' && pending > 0;
+      });
+      const outstandingPrincipal = activeLoansDocs.reduce((acc, l) => {
+        const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+        return acc + pending;
+      }, 0);
 
-      // Cumulative savings & fund from group or sum
-      const allSavingsTotal = contributionsSnap.docs.reduce((acc, d) => acc + (Number(d.data().paidAmount || d.data().amount) || 0), 0);
-      const allInterestTotal = contributionsSnap.docs.reduce((acc, d) => acc + (Number(d.data().interestAmount) || 0), 0);
-      const availableGroupBalance = group.totalFund !== undefined && group.totalFund > 0
-        ? group.totalFund
-        : Math.max(0, allSavingsTotal + allInterestTotal - outstandingPrincipal);
-
-      // Map member payment statuses
-      const allMembers = membersSnap.docs.map((d) => normalizeMember(d.id, d.data()));
-      const activeMembers = allMembers.filter((mem) => mem.isActive);
+      // Centralized Group Balances dynamically aggregated from all contributions
+      const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const totalSavings = allSavings.filter((c) => c.isPaid || c.paidAmount > 0).reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
+      const allLoansList = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
+      const totalInterest = Math.round(
+        (allSavings.reduce((sum, c) => sum + (c.interestAmount || c.interest || 0), 0) +
+         allLoansList.reduce((sum, l) => sum + (l.totalInterestPaid || l.total_interest_paid || 0), 0)) * 100
+      ) / 100;
+      const availableGroupBalance = Math.max(0, totalSavings + totalInterest - outstandingPrincipal);
 
       const paidMap = {};
       monthContributions.forEach((s) => {

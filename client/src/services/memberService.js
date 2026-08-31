@@ -30,10 +30,59 @@ import {
   normalizeMember,
   normalizeSavings,
   normalizeLoan,
+  calculateMonthlyMemberStatus,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters';
 
+export { calculateMonthlyMemberStatus };
+
+/**
+ * Pure helper to compute Monthly Payment Summary across members
+ */
+export function getMonthlyPaymentSummary({
+  members = [],
+  monthlyPayments = [],
+  selectedMonth = new Date().getMonth() + 1,
+  selectedYear = new Date().getFullYear(),
+  defaultMonthlyShare = 1000,
+}) {
+  const m = Number(selectedMonth);
+  const y = Number(selectedYear);
+
+  const membersWithDues = members.map((mem) => {
+    const dueInfo = calculateMonthlyMemberStatus({
+      member: mem,
+      payments: monthlyPayments,
+      selectedMonth: m,
+      selectedYear: y,
+      monthlyShare: defaultMonthlyShare,
+    });
+
+    return {
+      ...mem,
+      ...dueInfo,
+    };
+  });
+
+  const paidMembers = membersWithDues.filter((m) => m.isPaid);
+  const pendingMembers = membersWithDues.filter((m) => m.isPending);
+
+  return {
+    totalMembers: membersWithDues.length,
+    paidCount: paidMembers.length,
+    pendingCount: pendingMembers.length,
+    paidMembers,
+    pendingMembers,
+    membersWithDues,
+  };
+}
+
 export const memberService = {
+  calculateMonthlyMemberStatus,
+  getMonthlyPaymentSummary,
+  /**
+   * Get next member serial code
+   */
   getNextMemberCode: async (groupId = DEFAULT_GROUP_ID) => {
     const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
     const [membersSnap, counterSnap] = await Promise.all([
@@ -58,13 +107,18 @@ export const memberService = {
   getAllMembers: async (params = {}, groupId = DEFAULT_GROUP_ID) => {
     try {
       const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const m = parseInt(params.month, 10) || (new Date().getMonth() + 1);
+      const y = parseInt(params.year, 10) || new Date().getFullYear();
 
-      const [membersSnap, contributionsSnap, loansSnap] = await Promise.all([
+      // Read collections directly for target group
+      const [membersSnap, contributionsSnap, loansSnap, groupDocSnap] = await Promise.all([
         getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
         getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
         getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+        getDoc(doc(db, 'groups', targetGroupId)).catch(() => null),
       ]);
 
+      const defaultMonthlyShare = Number(groupDocSnap?.data()?.monthlyContribution ?? groupDocSnap?.data()?.monthly_contribution ?? 1000);
       const allContributions = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
       const allLoans = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
 
@@ -80,20 +134,53 @@ export const memberService = {
 
         // Calculate active loan outstanding
         const memberActiveLoans = allLoans.filter(
-          (l) => (l.memberId === memberId || l.member_id === memberId) && l.status === 'ACTIVE'
+          (l) => (l.memberId === memberId || l.member_id === memberId) && (l.status || '').toUpperCase() === 'ACTIVE'
         );
         const memberLoanOutstanding = memberActiveLoans.reduce(
-          (acc, l) => acc + (l.pendingPrincipal || 0),
+          (acc, l) => acc + (l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0)),
           0
         );
 
+        // Monthly due calculation for the selected period
+        const dueInfo = calculateMonthlyMemberStatus({
+          member: normalized,
+          payments: allContributions,
+          selectedMonth: m,
+          selectedYear: y,
+          monthlyShare: defaultMonthlyShare,
+        });
+
         return {
           ...normalized,
+          ...dueInfo,
+          account_status: normalized.status || 'ACTIVE',
+          accountStatus: normalized.status || 'ACTIVE',
+          member_status: normalized.status || 'ACTIVE',
+          memberStatus: normalized.status || 'ACTIVE',
           total_savings: memberSavingsTotal,
           totalSavings: memberSavingsTotal,
           outstanding_loans: memberLoanOutstanding,
           active_loan_amount: memberLoanOutstanding,
           active_loans_count: memberActiveLoans.length,
+          monthly_share: dueInfo.requiredAmount,
+          monthlyShare: dueInfo.requiredAmount,
+          paid_amount: dueInfo.amountPaid,
+          paidAmount: dueInfo.amountPaid,
+          current_due: dueInfo.currentDues,
+          currentDue: dueInfo.currentDues,
+          pending_amount: dueInfo.currentDues,
+          pendingAmount: dueInfo.currentDues,
+          remaining_due: dueInfo.currentDues,
+          remainingDue: dueInfo.currentDues,
+          status: dueInfo.status,
+          due_status: dueInfo.status,
+          dueStatus: dueInfo.status,
+          payment_status: dueInfo.status,
+          paymentStatus: dueInfo.status,
+          has_paid_current_month: dueInfo.isPaid,
+          hasPaidCurrentMonth: dueInfo.isPaid,
+          is_pending_dues: dueInfo.isPending,
+          isPendingDues: dueInfo.isPending,
         };
       });
 
@@ -124,9 +211,15 @@ export const memberService = {
         return numA - numB;
       });
 
+      const pendingMembersCount = filtered.filter((m) => m.isPendingDues).length;
+      const paidMembersCount = filtered.filter((m) => m.hasPaidCurrentMonth).length;
+
       return {
         success: true,
         count: filtered.length,
+        totalMembers: filtered.length,
+        paidCount: paidMembersCount,
+        pendingCount: pendingMembersCount,
         members: filtered,
       };
     } catch (err) {
@@ -320,10 +413,14 @@ export const memberService = {
         shares: parseInt(memberData.shares, 10) || 1,
         shareCount: parseInt(memberData.shares, 10) || 1,
         monthlyContribution: parseFloat(memberData.monthly_contribution || memberData.monthlyContribution) || 1000,
+        monthly_contribution: parseFloat(memberData.monthly_contribution || memberData.monthlyContribution) || 1000,
         monthlyContributionPerShare: 1000,
+        monthly_contribution_per_share: 1000,
         monthlyHaftaAmount: parseFloat(memberData.monthly_contribution || memberData.monthlyContribution) || 1000,
-        status: 'active',
+        status: 'ACTIVE',
+        status_lower: 'active',
         joinDate: memberData.joined_date || new Date().toISOString(),
+        join_date: memberData.joined_date || new Date().toISOString(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -335,14 +432,20 @@ export const memberService = {
         uid: createdAuthUser.uid,
         fullName: cleanName,
         name: cleanName,
+        full_name: cleanName,
         email: cleanEmail,
         phone: cleanPhone,
+        phone_number: cleanPhone,
         role: requestedRole.toLowerCase(),
         role_name: requestedRole,
         isActive: true,
+        is_active: true,
         memberId: newMemberId,
+        member_id: newMemberId,
         memberCode: newMemberPayload.memberCode,
+        member_code: newMemberPayload.memberCode,
         groupId: targetGroupId,
+        group_id: targetGroupId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -357,6 +460,26 @@ export const memberService = {
         date: new Date().toISOString(),
       });
       await batch.commit();
+
+      // Update Group Aggregate Document
+      try {
+        const groupRef = doc(db, 'groups', targetGroupId);
+        const groupSnap = await getDoc(groupRef);
+        if (groupSnap.exists()) {
+          const gData = groupSnap.data();
+          const currentTotal = Number(gData.totalMembers || gData.total_members || 0);
+          const currentActive = Number(gData.activeMembers || gData.active_members || 0);
+          await updateDoc(groupRef, {
+            totalMembers: currentTotal + 1,
+            total_members: currentTotal + 1,
+            activeMembers: currentActive + 1,
+            active_members: currentActive + 1,
+            updatedAt: serverTimestamp(),
+          });
+        }
+      } catch (e) {
+        console.warn('Notice: Group totalMembers update on member creation:', e);
+      }
 
       return {
         success: true,

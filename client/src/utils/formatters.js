@@ -165,19 +165,176 @@ export const normalizeMember = (id, data = {}) => {
     total_savings: Number(data.totalSavings || data.total_savings || 0),
     activeLoanAmount: Number(data.activeLoanAmount || data.active_loan_amount || data.outstanding_loans || 0),
     outstanding_loans: Number(data.activeLoanAmount || data.active_loan_amount || data.outstanding_loans || 0),
-    is_pending_dues: Boolean(data.is_pending_dues),
-    pending_amount: Number(data.pending_amount || 0),
   };
 };
+
+/**
+ * Canonical calculation for a member's monthly contribution and dues status
+ * Single source of truth for both Dashboard and Members pages.
+ */
+export function calculateMonthlyMemberStatus({
+  member = {},
+  payments = [],
+  selectedMonth = new Date().getMonth() + 1,
+  selectedYear = new Date().getFullYear(),
+  monthlyShare = 1000,
+}) {
+  const m = Number(selectedMonth);
+  const y = Number(selectedYear);
+  const memberId = member.id || member.memberId || member.member_id;
+  const requiredAmount = Number(
+    member.monthly_contribution || member.monthlyContribution || member.monthlyShare || monthlyShare || 1000
+  );
+
+  // Filter payments strictly for this member in the selected month & year
+  const memberPayments = payments.filter((p) => {
+    const pMemId = p.memberId || p.member_id;
+    const pMonth = Number(p.month);
+    const pYear = Number(p.year);
+    const pPaid = Number(
+      p.paidAmount !== undefined
+        ? p.paidAmount
+        : (p.paid_amount !== undefined
+        ? p.paid_amount
+        : (p.amount !== undefined
+        ? p.amount
+        : 0))
+    );
+    const pStatus = (p.status || '').toLowerCase();
+    return pMemId === memberId && pMonth === m && pYear === y && (pStatus === 'paid' || pPaid > 0);
+  });
+
+  const amountPaid = memberPayments.reduce((sum, p) => {
+    const pPaid = Number(
+      p.paidAmount !== undefined
+        ? p.paidAmount
+        : (p.paid_amount !== undefined
+        ? p.paid_amount
+        : (p.amount !== undefined
+        ? p.amount
+        : 0))
+    );
+    return sum + pPaid;
+  }, 0);
+
+  const currentDues = Math.max(requiredAmount - amountPaid, 0);
+  const isPaid = currentDues === 0 && amountPaid >= requiredAmount;
+  const isPending = !isPaid;
+  const status = isPaid ? 'Paid' : 'Pending';
+
+  return {
+    memberId,
+    amountPaid,
+    requiredAmount,
+    currentDues,
+    current_dues: currentDues,
+    remainingDue: currentDues,
+    remaining_due: currentDues,
+    pending_amount: currentDues,
+    pendingAmount: currentDues,
+    status,
+    due_status: status,
+    dueStatus: status,
+    payment_status: status,
+    paymentStatus: status,
+    isPending,
+    is_pending_dues: isPending,
+    isPendingDues: isPending,
+    isPaid,
+    has_paid_current_month: isPaid,
+    hasPaidCurrentMonth: isPaid,
+  };
+}
+
+/**
+ * Single source of truth calculation for multiple active members in a selected period.
+ */
+export function calculateMonthlyMemberStatuses({
+  activeMembers = [],
+  payments = [],
+  selectedMonth = new Date().getMonth() + 1,
+  selectedYear = new Date().getFullYear(),
+  monthlyShare = 1000,
+}) {
+  const m = Number(selectedMonth);
+  const y = Number(selectedYear);
+
+  const statuses = activeMembers.map((member) => {
+    const statusObj = calculateMonthlyMemberStatus({
+      member,
+      payments,
+      selectedMonth: m,
+      selectedYear: y,
+      monthlyShare,
+    });
+    return {
+      ...member,
+      ...statusObj,
+    };
+  });
+
+  const paidMembers = statuses.filter((s) => s.isPaid);
+  const pendingMembers = statuses.filter((s) => s.isPending);
+
+  const totalMembers = statuses.length;
+  const paidCount = paidMembers.length;
+  const pendingCount = pendingMembers.length;
+
+  const collectedAmount = statuses.reduce((sum, s) => sum + s.amountPaid, 0);
+  const monthlyTarget = statuses.reduce((sum, s) => sum + s.requiredAmount, 0);
+  const pendingAmount = pendingMembers.reduce((sum, s) => sum + s.currentDues, 0);
+  const progressPercentage = monthlyTarget > 0 ? Math.round(((collectedAmount / monthlyTarget) * 100) * 100) / 100 : 0;
+
+  return {
+    month: m,
+    year: y,
+    totalMembers,
+    paidCount,
+    paidMembersCount: paidCount,
+    paidMembers,
+    pendingCount,
+    pendingMembersCount: pendingCount,
+    pendingMembers,
+    collectedAmount,
+    monthlyTarget,
+    targetAmount: monthlyTarget,
+    pendingAmount,
+    expectedPending: pendingAmount,
+    expectedPendingAmount: pendingAmount,
+    progressPercentage,
+    completionPercentage: progressPercentage,
+    monthlyStatuses: statuses,
+  };
+}
 
 export const normalizeSavings = (id, data = {}) => {
   const savingId = id || data.id || '';
   const memberId = data.memberId || data.member_id || '';
-  const paidAmount = Number(data.paidAmount !== undefined ? data.paidAmount : (data.totalPaid !== undefined ? data.totalPaid : data.amount || 0));
-  const expectedAmount = Number(data.expectedAmount || data.regularHaftaAmount || data.amount || 1000);
-  const loanPrincipalPaid = Number(data.loanPrincipalPaid || 0);
-  const interestAmount = Number(data.interestAmount || 0);
-  const status = (data.status || (paidAmount >= expectedAmount ? 'paid' : 'pending')).toLowerCase();
+  const expectedAmount = Number(data.expectedAmount || data.expected_amount || 1000);
+  const rawStatus = (data.status || '').toLowerCase();
+
+  let paidAmount = Number(
+    data.paidAmount !== undefined
+      ? data.paidAmount
+      : (data.paid_amount !== undefined
+      ? data.paid_amount
+      : (data.amount !== undefined
+      ? data.amount
+      : (rawStatus === 'paid' ? expectedAmount : 0)))
+  );
+
+  // If status is not paid and no explicit paid amount was provided, paidAmount is 0
+  if (rawStatus !== 'paid' && data.paidAmount === undefined && data.paid_amount === undefined && data.amount === undefined) {
+    paidAmount = 0;
+  }
+  if (rawStatus === 'pending' && (data.paidAmount === 0 || data.paid_amount === 0 || data.totalPaid === 0)) {
+    paidAmount = 0;
+  }
+
+  const loanPrincipalPaid = Number(data.loanPrincipalPaid || data.loan_principal_paid || 0);
+  const interestAmount = Number(data.interestAmount || data.interest_amount || data.interest || 0);
+  const isPaid = (rawStatus === 'paid' && paidAmount >= expectedAmount) || (paidAmount >= expectedAmount && expectedAmount > 0);
+  const status = isPaid ? 'paid' : 'pending';
 
   return {
     id: savingId,
@@ -194,12 +351,12 @@ export const normalizeSavings = (id, data = {}) => {
     expectedAmount,
     regularHaftaAmount: expectedAmount,
     paidAmount,
-    amount: paidAmount > 0 ? paidAmount : expectedAmount,
-    totalPaid: Number(data.totalPaid || paidAmount + loanPrincipalPaid + interestAmount),
+    amount: paidAmount,
+    totalPaid: Number(data.totalPaid !== undefined ? data.totalPaid : (paidAmount + loanPrincipalPaid + interestAmount)),
     loanPrincipalPaid,
     interestAmount,
     status: status,
-    isPaid: status === 'paid' || paidAmount >= expectedAmount,
+    isPaid: isPaid,
     paymentDate: data.paymentDate || data.payment_date || data.createdAt || new Date().toISOString().split('T')[0],
     payment_date: data.paymentDate || data.payment_date || data.createdAt || new Date().toISOString().split('T')[0],
     paymentMode: data.paymentMode || data.payment_mode || 'UPI',

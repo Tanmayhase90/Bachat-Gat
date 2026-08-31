@@ -5,7 +5,7 @@ import { savingsService } from '../services/savingsService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
-import { PiggyBank, Search, Plus, Filter, Calendar } from 'lucide-react';
+import { PiggyBank, Search, Plus, Filter, Calendar, Building2, User } from 'lucide-react';
 
 const Savings = () => {
   const { user, isAdmin, isMember, canManageSavings } = useAuth();
@@ -15,6 +15,7 @@ const Savings = () => {
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
+  const [scope, setScope] = useState('all'); // 'all' | 'my'
   const [search, setSearch] = useState('');
   const [savingsList, setSavingsList] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
@@ -27,7 +28,7 @@ const Savings = () => {
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
       if (search) params.search = search;
-      if (isMember && !isAdmin && user?.memberId) {
+      if (scope === 'my' && user?.memberId) {
         params.memberId = user.memberId;
       }
 
@@ -45,7 +46,7 @@ const Savings = () => {
 
   useEffect(() => {
     fetchSavings();
-  }, [refreshTrigger, selectedMonth, selectedYear, search]);
+  }, [refreshTrigger, selectedMonth, selectedYear, scope, search]);
 
   const months = [
     { value: '', label: 'All Months' },
@@ -68,7 +69,7 @@ const Savings = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Monthly Savings</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Group Monthly Savings</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
             Record and review member regular monthly contributions and hafta records
           </p>
@@ -94,12 +95,58 @@ const Savings = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          {/* Scope Filter for Members */}
+          {user?.memberId && (
+            <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: 'var(--radius-md)', gap: '4px' }}>
+              <button
+                type="button"
+                onClick={() => setScope('all')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  background: scope === 'all' ? '#FFFFFF' : 'transparent',
+                  color: scope === 'all' ? 'var(--primary)' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: scope === 'all' ? 'var(--shadow-xs)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <Building2 size={13} /> All Group Savings
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope('my')}
+                style={{
+                  padding: '6px 12px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  background: scope === 'my' ? '#FFFFFF' : 'transparent',
+                  color: scope === 'my' ? 'var(--primary)' : 'var(--text-secondary)',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: scope === 'my' ? 'var(--shadow-xs)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                <User size={13} /> My Savings
+              </button>
+            </div>
+          )}
+
           <div style={{ position: 'relative' }}>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="form-select"
-              style={{ width: '150px', fontSize: '0.85rem' }}
+              style={{ width: '140px', fontSize: '0.85rem' }}
             >
               {months.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -114,7 +161,7 @@ const Savings = () => {
               value={selectedYear}
               onChange={(e) => setSelectedYear(e.target.value)}
               className="form-select"
-              style={{ width: '130px', fontSize: '0.85rem' }}
+              style={{ width: '120px', fontSize: '0.85rem' }}
             >
               <option value="">All Years</option>
               <option value="2025">2025</option>
@@ -137,7 +184,7 @@ const Savings = () => {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative', width: '260px' }}>
+          <div style={{ position: 'relative', width: '240px' }}>
             <Search
               size={17}
               color="var(--text-muted)"

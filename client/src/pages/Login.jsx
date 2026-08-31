@@ -18,13 +18,6 @@ const Login = () => {
   const [error, setError] = useState('');
   const [successInfo, setSuccessInfo] = useState('');
 
-  // If already authenticated, redirect to dashboard
-  useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      navigate('/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, authLoading, navigate]);
-
   // Load any registration success info or registered email on initial mount only
   useEffect(() => {
     if (location.state?.message) {

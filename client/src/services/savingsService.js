@@ -113,20 +113,36 @@ export const savingsService = {
 
       const contributionPayload = {
         id: docId,
+        contribId: docId,
+        contrib_id: docId,
         groupId: targetGroupId,
+        group_id: targetGroupId,
         memberId,
+        member_id: memberId,
         month,
         year,
         expectedAmount: amount,
+        expected_amount: amount,
         regularHaftaAmount: amount,
+        regular_hafta_amount: amount,
         paidAmount: amount,
+        paid_amount: amount,
+        amount,
         totalPaid: amount,
+        total_paid: amount,
         loanPrincipalPaid: 0,
+        loan_principal_paid: 0,
         interestAmount: 0,
-        status: 'paid',
+        interest_amount: 0,
+        interest: 0,
+        status: 'PAID',
+        status_lower: 'paid',
         paymentDate: data.payment_date || new Date().toISOString(),
+        payment_date: data.payment_date || new Date().toISOString(),
         paymentMode: mode,
+        payment_mode: mode,
         notes: notes.trim(),
+        remarks: notes.trim(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -161,11 +177,17 @@ export const savingsService = {
         const groupSnap = await getDoc(groupRef);
         if (groupSnap.exists()) {
           const gData = groupSnap.data();
-          const currentSavings = Number(gData.totalSavings || 0);
-          const currentFund = Number(gData.totalFund || 0);
+          const currentSavings = Number(gData.totalSavings || gData.total_savings || 0);
+          const currentFund = Number(gData.totalFund || gData.total_fund || 0);
           await updateDoc(groupRef, {
             totalSavings: currentSavings + amount,
+            total_savings: currentSavings + amount,
+            savingsTotal: currentSavings + amount,
+            savings_total: currentSavings + amount,
             totalFund: currentFund + amount,
+            total_fund: currentFund + amount,
+            availableBalance: currentFund + amount,
+            available_balance: currentFund + amount,
             updatedAt: new Date().toISOString(),
           });
         }

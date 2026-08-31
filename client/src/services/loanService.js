@@ -34,50 +34,101 @@ export const loanService = {
       const membersMap = {};
       membersSnap.docs.forEach((docSnap) => {
         const d = docSnap.data();
-        membersMap[docSnap.id] = d.name || d.fullName || 'Member';
-        if (d.userId) membersMap[d.userId] = d.name || d.fullName || 'Member';
-        if (d.authUid) membersMap[d.authUid] = d.name || d.fullName || 'Member';
+        const memberName = d.name || d.fullName || 'Member';
+        const memberCode = d.memberCode || d.member_code || docSnap.id;
+        membersMap[docSnap.id] = { name: memberName, code: memberCode };
+        if (d.userId) membersMap[d.userId] = { name: memberName, code: memberCode };
+        if (d.authUid) membersMap[d.authUid] = { name: memberName, code: memberCode };
       });
 
-      const loans = loansSnap.docs.map((docSnap) => {
+      const allLoans = loansSnap.docs.map((docSnap) => {
         const raw = docSnap.data();
         const normalized = normalizeLoan(docSnap.id, raw);
-        const memberName = membersMap[normalized.memberId] || normalized.memberName;
+        const memInfo = membersMap[normalized.memberId] || { name: normalized.memberName, code: normalized.memberCode };
 
         return {
           ...normalized,
-          member_name: memberName,
-          memberName: memberName,
+          member_name: memInfo.name || normalized.memberName,
+          memberName: memInfo.name || normalized.memberName,
+          member_code: memInfo.code || normalized.memberCode,
+          memberCode: memInfo.code || normalized.memberCode,
         };
       });
 
-      let filtered = loans;
-      if (params.status) {
-        filtered = filtered.filter((l) => l.status === params.status.toUpperCase());
-      }
+      const totalActiveLoansCount = allLoans.filter((l) => l.status === 'ACTIVE').length;
+      const totalClosedLoansCount = allLoans.filter((l) => l.status === 'CLOSED').length;
+      const totalOutstanding = allLoans
+        .filter((l) => l.status === 'ACTIVE')
+        .reduce((sum, l) => sum + (l.pendingPrincipal || 0), 0);
+      const totalDisbursed = allLoans.reduce((sum, l) => sum + (l.originalPrincipal || 0), 0);
+
+      let filtered = allLoans;
       if (params.memberId) {
         filtered = filtered.filter((l) => l.memberId === params.memberId || l.member_id === params.memberId);
+      }
+      if (params.status) {
+        filtered = filtered.filter((l) => l.status === params.status.toUpperCase());
       }
       if (params.search) {
         const s = params.search.toLowerCase();
         filtered = filtered.filter(
           (l) =>
-            l.member_name.toLowerCase().includes(s) ||
-            l.member_code.toLowerCase().includes(s) ||
-            l.loan_number.toLowerCase().includes(s) ||
-            l.purpose.toLowerCase().includes(s)
+            (l.member_name && l.member_name.toLowerCase().includes(s)) ||
+            (l.member_code && l.member_code.toLowerCase().includes(s)) ||
+            (l.loan_number && l.loan_number.toLowerCase().includes(s)) ||
+            (l.purpose && l.purpose.toLowerCase().includes(s))
         );
       }
+
+      // Sort by issue date descending
+      filtered.sort((a, b) => new Date(b.issueDate || b.loanDate || 0) - new Date(a.issueDate || a.loanDate || 0));
 
       return {
         success: true,
         count: filtered.length,
+        totalLoansCount: allLoans.length,
+        activeLoansCount: totalActiveLoansCount,
+        closedLoansCount: totalClosedLoansCount,
+        totalOutstanding,
+        totalDisbursed,
         loans: filtered,
+        allLoans,
       };
     } catch (err) {
       console.error('Failed to get loans from Firestore:', err);
-      return { success: true, count: 0, loans: [] };
+      return {
+        success: true,
+        count: 0,
+        totalLoansCount: 0,
+        activeLoansCount: 0,
+        closedLoansCount: 0,
+        totalOutstanding: 0,
+        totalDisbursed: 0,
+        loans: [],
+        allLoans: [],
+      };
     }
+  },
+
+  /**
+   * Get loans specifically for a member
+   */
+  getLoansByMember: async (memberId, groupId = DEFAULT_GROUP_ID) => {
+    return loanService.getAllLoans({ memberId }, groupId);
+  },
+
+  /**
+   * Get only active loans
+   */
+  getActiveLoans: async (groupId = DEFAULT_GROUP_ID) => {
+    return loanService.getAllLoans({ status: 'ACTIVE' }, groupId);
+  },
+
+  /**
+   * Get only closed loans
+   */
+  getClosedLoans: async (groupId = DEFAULT_GROUP_ID) => {
+    return loanService.getAllLoans({ status: 'CLOSED' }, groupId);
   },
 
   /**
@@ -283,59 +334,90 @@ export const loanService = {
       const calculatedInterest = Math.round(((currentPending * interestRate) / 100) * 100) / 100;
       const totalPayment = principalRepay + calculatedInterest + regularHafta;
 
-      const newPending = Math.max(0, currentPending - principalRepay);
-      const newStatus = newPending <= 0 ? 'closed' : 'active';
+      const memberId = loanData.memberId;
+      const currentPrincipalPaid = Number(loanData.totalPrincipalPaid || loanData.total_principal_paid || 0);
+      const currentInterestPaid = Number(loanData.totalInterestPaid || loanData.total_interest_paid || 0);
 
-      // Update Loan doc
+      // 1. Update Loan Document (Outstanding balance, principal paid, interest paid, status)
       await updateDoc(loanDocRef, {
         pendingPrincipal: newPending,
-        status: newStatus,
+        totalPrincipalPaid: currentPrincipalPaid + principalRepay,
+        total_principal_paid: currentPrincipalPaid + principalRepay,
+        totalInterestPaid: currentInterestPaid + calculatedInterest,
+        total_interest_paid: currentInterestPaid + calculatedInterest,
+        status: newStatus.toUpperCase(),
         updatedAt: new Date().toISOString(),
       });
 
-      // Save/Update monthly contribution doc
-      const memberId = loanData.memberId;
-      const contribDocId = `C_${memberId}_${year}_${String(month).padStart(2, '0')}`;
-      const contribRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', contribDocId);
-
-      await setDoc(contribRef, {
-        id: contribDocId,
-        groupId: targetGroupId,
-        memberId,
-        month,
-        year,
-        expectedAmount: regularHafta > 0 ? regularHafta : 1000,
-        regularHaftaAmount: regularHafta,
-        paidAmount: regularHafta,
-        loanPrincipalPaid: principalRepay,
-        interestAmount: calculatedInterest,
-        totalPaid: totalPayment,
-        status: 'paid',
-        paymentDate,
-        paymentMode: mode,
-        notes: remarks,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-
-      // Keep an immutable repayment ledger in its own collection. The monthly
-      // contribution document remains the aggregate used by dashboard reports.
+      // 2. Save immutable loan repayment record in 'repayments' collection
       const repaymentId = `REP_${loanId}_${Date.now()}`;
       await setDoc(doc(db, 'groups', targetGroupId, 'repayments', repaymentId), {
         id: repaymentId,
+        repaymentId: repaymentId,
+        repayment_id: repaymentId,
         groupId: targetGroupId,
+        group_id: targetGroupId,
         loanId,
+        loan_id: loanId,
         memberId,
+        member_id: memberId,
+        type: 'LOAN_REPAYMENT',
+        transactionType: 'LOAN_REPAYMENT',
         principalAmount: principalRepay,
+        principal_amount: principalRepay,
         interestAmount: calculatedInterest,
+        interest_amount: calculatedInterest,
         regularHaftaAmount: regularHafta,
+        regular_hafta_amount: regularHafta,
         amount: totalPayment,
         paymentMonth: month,
+        payment_month: month,
         paymentYear: year,
+        payment_year: year,
         paymentDate,
+        payment_date: paymentDate,
         paymentMode: mode,
+        payment_mode: mode,
         remarks,
         createdAt: serverTimestamp(),
       });
+
+      // 3. ONLY if regularHafta was explicitly entered (> 0), record separate savings contribution
+      if (regularHafta > 0) {
+        const contribDocId = `C_${memberId}_${year}_${String(month).padStart(2, '0')}`;
+        const contribRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', contribDocId);
+        const existingContrib = await getDoc(contribRef);
+        const existingPaid = existingContrib.exists() ? Number(existingContrib.data().paidAmount || 0) : 0;
+        const totalPaidSavings = existingPaid + regularHafta;
+        const expectedShare = existingContrib.exists() ? Number(existingContrib.data().expectedAmount || 1000) : 1000;
+        const isPaidFull = totalPaidSavings >= expectedShare;
+
+        await setDoc(contribRef, {
+          id: contribDocId,
+          contribId: contribDocId,
+          contrib_id: contribDocId,
+          groupId: targetGroupId,
+          group_id: targetGroupId,
+          memberId,
+          member_id: memberId,
+          month,
+          year,
+          expectedAmount: expectedShare,
+          expected_amount: expectedShare,
+          paidAmount: totalPaidSavings,
+          paid_amount: totalPaidSavings,
+          amount: totalPaidSavings,
+          regularHaftaAmount: totalPaidSavings,
+          regular_hafta_amount: totalPaidSavings,
+          status: isPaidFull ? 'PAID' : 'PENDING',
+          status_lower: isPaidFull ? 'paid' : 'pending',
+          paymentDate,
+          payment_date: paymentDate,
+          paymentMode: mode,
+          payment_mode: mode,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
 
       // Fetch member name for logging
       let memberName = 'Member';
@@ -352,31 +434,38 @@ export const loanService = {
         id: actId,
         type: 'repayment',
         amount: totalPayment,
-        description: `Installment of ₹${totalPayment} (Principal: ₹${principalRepay}, Interest: ₹${calculatedInterest}) received from ${memberName}`,
+        description: `Loan repayment ₹${totalPayment} (Principal: ₹${principalRepay}, Interest: ₹${calculatedInterest}) received from ${memberName}`,
         memberId,
         memberName,
         referenceId: loanId,
         date: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       });
 
-      // Update Group summary metrics in Firestore
-      try {
-        const groupRef = doc(db, 'groups', targetGroupId);
-        const groupSnap = await getDoc(groupRef);
-        if (groupSnap.exists()) {
-          const gData = groupSnap.data();
-          const currentLoans = Number(gData.totalOutstandingLoans || 0);
-          const currentInterest = Number(gData.totalInterestCollected || 0);
-          const currentFund = Number(gData.totalFund || 0);
-          await updateDoc(groupRef, {
-            totalOutstandingLoans: Math.max(0, currentLoans - principalRepay),
-            totalInterestCollected: currentInterest + calculatedInterest,
-            totalFund: currentFund + totalPayment,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      } catch (e) {
-        console.warn('Notice: Group summary update on repayment:', e);
+      // 3. Update Group Document Aggregate Metrics
+      const groupRef = doc(db, 'groups', targetGroupId);
+      const groupSnap = await getDoc(groupRef);
+      if (groupSnap.exists()) {
+        const groupData = groupSnap.data();
+        const currentGroupOutstanding = Number(groupData.totalOutstandingLoans || groupData.total_outstanding_loans || 0);
+        const currentInterestCollected = Number(groupData.totalInterestCollected || groupData.total_interest_collected || 0);
+        const currentTotalFund = Number(groupData.totalFund || groupData.total_fund || 0);
+
+        await updateDoc(groupRef, {
+          totalOutstandingLoans: Math.max(0, currentGroupOutstanding - principalRepay),
+          total_outstanding_loans: Math.max(0, currentGroupOutstanding - principalRepay),
+          activeLoans: Math.max(0, currentGroupOutstanding - principalRepay),
+          active_loans: Math.max(0, currentGroupOutstanding - principalRepay),
+          totalInterestCollected: currentInterestCollected + calculatedInterest,
+          total_interest_collected: currentInterestCollected + calculatedInterest,
+          totalInterest: currentInterestCollected + calculatedInterest,
+          total_interest: currentInterestCollected + calculatedInterest,
+          totalFund: Math.max(0, currentTotalFund + principalRepay + calculatedInterest),
+          total_fund: Math.max(0, currentTotalFund + principalRepay + calculatedInterest),
+          availableBalance: Math.max(0, currentTotalFund + principalRepay + calculatedInterest),
+          available_balance: Math.max(0, currentTotalFund + principalRepay + calculatedInterest),
+          updatedAt: serverTimestamp(),
+        }).catch(() => {});
       }
 
       return {

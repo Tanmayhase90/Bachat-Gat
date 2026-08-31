@@ -117,8 +117,8 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
               className="form-input"
               value={formData.principal_amount}
               onChange={handleChange}
-              min="500"
-              step="100"
+              min="1"
+              step="1"
               required
             />
           </div>
@@ -131,9 +131,9 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
               className="form-input"
               value={formData.interest_rate}
               onChange={handleChange}
-              min="0.1"
-              max="20"
-              step="0.1"
+              min="0.01"
+              max="100"
+              step="0.01"
               required
             />
           </div>

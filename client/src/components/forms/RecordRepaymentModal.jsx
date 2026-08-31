@@ -219,7 +219,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               onChange={handleChange}
               tabIndex={0}
               min="0"
-              step="50"
+              step="1"
             />
           </div>
 
@@ -246,7 +246,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               tabIndex={0}
               min="0"
               max={currentOutstanding}
-              step="10"
+              step="1"
             />
           </div>
         </div>

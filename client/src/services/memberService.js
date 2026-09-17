@@ -109,24 +109,27 @@ export const memberService = {
   },
 
   /**
-   * Get next member serial code (Strictly M- series, completely independent of admins)
+   * Get next member serial code (Strictly continuous M- series with NO gaps)
+   * Based ONLY on actual existing regular members in groups/{groupId}/members
    */
   getNextMemberCode: async (groupId = DEFAULT_GROUP_ID) => {
     const targetGroupId = groupId || DEFAULT_GROUP_ID;
-    const [membersSnap, counterSnap] = await Promise.all([
-      getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
-      getDoc(doc(db, 'groups', targetGroupId, 'system', 'member_counter')).catch(() => null),
-    ]);
-    let maxNumber = Number(counterSnap?.data()?.lastNumber || 0);
+    const membersSnap = await getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] }));
+    const existingNums = new Set();
     membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((memberDoc) => {
       const data = memberDoc.data();
       const candidates = [memberDoc.id, data.memberCode, data.member_code, data.memberId, data.member_id];
       candidates.forEach((value) => {
         const num = memberService.parseMemberNumber(value);
-        if (num !== null) maxNumber = Math.max(maxNumber, num);
+        if (num !== null && num > 0) existingNums.add(num);
       });
     });
-    const nextNumber = maxNumber + 1;
+
+    let nextNumber = 1;
+    while (existingNums.has(nextNumber)) {
+      nextNumber++;
+    }
+
     return {
       success: true,
       memberNumber: nextNumber,
@@ -512,16 +515,19 @@ export const memberService = {
           : 'name';
         throw new Error(`Duplicate member not added. This ${duplicateField} already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
       }
-      let observedMax = Number(counterSnap?.data()?.lastNumber || 0);
+      const existingNums = new Set();
       membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((d) => {
         const data = d.data();
         [d.id, data.memberCode, data.member_code, data.memberId, data.member_id].forEach((value) => {
           const num = memberService.parseMemberNumber(value);
-          if (num !== null) observedMax = Math.max(observedMax, num);
+          if (num !== null && num > 0) existingNums.add(num);
         });
       });
 
-      const nextNumber = observedMax + 1;
+      let nextNumber = 1;
+      while (existingNums.has(nextNumber)) {
+        nextNumber++;
+      }
       const newMemberId = `M_${nextNumber}`;
       const newMemberCode = `M-${nextNumber}`;
 
@@ -989,6 +995,9 @@ export const memberService = {
         await batch.commit();
       }
 
+      // Automatically compact remaining members so sequence remains M_1...M_N continuous with NO gaps
+      await memberService.compactMemberSequence(targetGroupId);
+
       // Log activity and recalculate authoritative Group aggregates from Firestore collections
       try {
         const actId = `ACT_${Date.now()}_del`;
@@ -1024,6 +1033,292 @@ export const memberService = {
     } catch (err) {
       console.error('Failed to delete member:', err);
       throw new Error(err.message || 'Failed to delete member.');
+    }
+  },
+
+  /**
+   * Compact member sequence to ensure M_1, M_2, ... M_N with NO missing numbers.
+   * Shifts subsequent members down when a member is deleted, preserving all profile data
+   * and updating references in monthly_contributions, loans, repayments, and activities.
+   */
+  compactMemberSequence: async (groupId = DEFAULT_GROUP_ID) => {
+    try {
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
+      const membersSnap = await getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] }));
+      const regularMembers = membersSnap.docs
+        .filter((d) => isRegularMember(d.data()))
+        .map((d) => ({
+          docId: d.id,
+          data: d.data(),
+          number: memberService.parseMemberNumber(d.id) || memberService.parseMemberNumber(d.data()?.memberCode) || 0,
+        }))
+        .filter((m) => m.number > 0)
+        .sort((a, b) => a.number - b.number);
+
+      const totalRemaining = regularMembers.length;
+      const shifts = [];
+      regularMembers.forEach((mem, idx) => {
+        const expectedNumber = idx + 1;
+        if (mem.number !== expectedNumber) {
+          shifts.push({
+            oldDocId: mem.docId,
+            oldNumber: mem.number,
+            newDocId: `M_${expectedNumber}`,
+            newNumber: expectedNumber,
+            data: mem.data,
+          });
+        }
+      });
+
+      const counterRef = doc(db, 'groups', targetGroupId, 'system', 'member_counter');
+      if (shifts.length === 0) {
+        await setDoc(counterRef, {
+          lastNumber: totalRemaining,
+          format: 'M-{number}',
+          updatedAt: serverTimestamp(),
+        }, { merge: true }).catch(() => null);
+        return { success: true, shiftedCount: 0, totalMembers: totalRemaining };
+      }
+
+      // 1. Shift member documents in atomic batch writes
+      const targetDocIds = new Set(shifts.map((s) => s.newDocId));
+      const oldDocIds = new Set(shifts.map((s) => s.oldDocId));
+      const docIdsToDelete = [];
+      for (const oldId of oldDocIds) {
+        if (!targetDocIds.has(oldId)) {
+          docIdsToDelete.push(oldId);
+        }
+      }
+
+      let memberBatch = writeBatch(db);
+      let memberBatchCount = 0;
+
+      for (const shift of shifts) {
+        const targetRef = doc(db, 'groups', targetGroupId, 'members', shift.newDocId);
+        const updatedPayload = {
+          ...shift.data,
+          id: shift.newDocId,
+          memberId: shift.newDocId,
+          member_id: shift.newDocId,
+          memberCode: `M-${shift.newNumber}`,
+          member_code: `M-${shift.newNumber}`,
+          updatedAt: new Date().toISOString(),
+        };
+        memberBatch.set(targetRef, updatedPayload);
+        memberBatchCount++;
+        if (memberBatchCount >= 400) {
+          await memberBatch.commit();
+          memberBatch = writeBatch(db);
+          memberBatchCount = 0;
+        }
+      }
+
+      for (const delId of docIdsToDelete) {
+        const delRef = doc(db, 'groups', targetGroupId, 'members', delId);
+        memberBatch.delete(delRef);
+        memberBatchCount++;
+        if (memberBatchCount >= 400) {
+          await memberBatch.commit();
+          memberBatch = writeBatch(db);
+          memberBatchCount = 0;
+        }
+      }
+
+      if (memberBatchCount > 0) {
+        await memberBatch.commit();
+      }
+
+      // 2. Build shift map for reference updates
+      const shiftMap = new Map();
+      shifts.forEach((s) => {
+        shiftMap.set(s.oldDocId, {
+          newDocId: s.newDocId,
+          newCode: `M-${s.newNumber}`,
+          oldCode: `M-${s.oldNumber}`,
+        });
+      });
+
+      // 3. Update references in monthly_contributions
+      try {
+        const contribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] }));
+        const contribTargets = new Map();
+        const contribOldDocIds = new Set();
+
+        for (const cDoc of contribsSnap.docs) {
+          const cData = cDoc.data();
+          const memId = cData.memberId || cData.member_id;
+          if (memId && shiftMap.has(memId)) {
+            const info = shiftMap.get(memId);
+            const oldCId = cDoc.id;
+            contribOldDocIds.add(oldCId);
+            const match = oldCId.match(new RegExp(`^C_${memId}_(.+)$`));
+            const newCId = match ? `C_${info.newDocId}_${match[1]}` : oldCId;
+            const newDocRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', newCId);
+            contribTargets.set(newCId, {
+              ref: newDocRef,
+              payload: {
+                ...cData,
+                id: newCId,
+                memberId: info.newDocId,
+                member_id: info.newDocId,
+                memberCode: info.newCode,
+                member_code: info.newCode,
+                updatedAt: new Date().toISOString(),
+              },
+            });
+          }
+        }
+
+        const contribDocsToDelete = [];
+        for (const oldCId of contribOldDocIds) {
+          if (!contribTargets.has(oldCId)) {
+            contribDocsToDelete.push(doc(db, 'groups', targetGroupId, 'monthly_contributions', oldCId));
+          }
+        }
+
+        let contribBatch = writeBatch(db);
+        let contribBatchCount = 0;
+
+        for (const item of contribTargets.values()) {
+          contribBatch.set(item.ref, item.payload);
+          contribBatchCount++;
+          if (contribBatchCount >= 400) {
+            await contribBatch.commit();
+            contribBatch = writeBatch(db);
+            contribBatchCount = 0;
+          }
+        }
+
+        for (const delRef of contribDocsToDelete) {
+          contribBatch.delete(delRef);
+          contribBatchCount++;
+          if (contribBatchCount >= 400) {
+            await contribBatch.commit();
+            contribBatch = writeBatch(db);
+            contribBatchCount = 0;
+          }
+        }
+
+        if (contribBatchCount > 0) {
+          await contribBatch.commit();
+        }
+      } catch (err) {
+        console.warn('Notice: Updating contributions references during member compaction:', err);
+      }
+
+      // 4. Update references in loans
+      try {
+        const loansSnap = await getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] }));
+        let loanBatch = writeBatch(db);
+        let loanBatchCount = 0;
+
+        for (const lDoc of loansSnap.docs) {
+          const lData = lDoc.data();
+          const memId = lData.memberId || lData.member_id;
+          if (memId && shiftMap.has(memId)) {
+            const info = shiftMap.get(memId);
+            loanBatch.update(lDoc.ref, {
+              memberId: info.newDocId,
+              member_id: info.newDocId,
+              memberCode: info.newCode,
+              member_code: info.newCode,
+              updatedAt: new Date().toISOString(),
+            });
+            loanBatchCount++;
+            if (loanBatchCount >= 400) {
+              await loanBatch.commit();
+              loanBatch = writeBatch(db);
+              loanBatchCount = 0;
+            }
+          }
+        }
+        if (loanBatchCount > 0) {
+          await loanBatch.commit();
+        }
+      } catch (err) {
+        console.warn('Notice: Updating loans references during member compaction:', err);
+      }
+
+      // 5. Update references in repayments
+      try {
+        const repaysSnap = await getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] }));
+        let repayBatch = writeBatch(db);
+        let repayBatchCount = 0;
+
+        for (const rDoc of repaysSnap.docs) {
+          const rData = rDoc.data();
+          const memId = rData.memberId || rData.member_id;
+          if (memId && shiftMap.has(memId)) {
+            const info = shiftMap.get(memId);
+            repayBatch.update(rDoc.ref, {
+              memberId: info.newDocId,
+              member_id: info.newDocId,
+              updatedAt: new Date().toISOString(),
+            });
+            repayBatchCount++;
+            if (repayBatchCount >= 400) {
+              await repayBatch.commit();
+              repayBatch = writeBatch(db);
+              repayBatchCount = 0;
+            }
+          }
+        }
+        if (repayBatchCount > 0) {
+          await repayBatch.commit();
+        }
+      } catch (err) {
+        console.warn('Notice: Updating repayments references during member compaction:', err);
+      }
+
+      // 6. Update references in activities
+      try {
+        const actsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'activities')).catch(() => ({ docs: [] }));
+        let actBatch = writeBatch(db);
+        let actBatchCount = 0;
+
+        for (const aDoc of actsSnap.docs) {
+          const aData = aDoc.data();
+          const memId = aData.memberId || aData.member_id;
+          const refId = aData.referenceId;
+          const updates = {};
+          if (memId && shiftMap.has(memId)) {
+            updates.memberId = shiftMap.get(memId).newDocId;
+          }
+          if (refId && shiftMap.has(refId)) {
+            updates.referenceId = shiftMap.get(refId).newDocId;
+          }
+          if (Object.keys(updates).length > 0) {
+            actBatch.update(aDoc.ref, updates);
+            actBatchCount++;
+            if (actBatchCount >= 400) {
+              await actBatch.commit();
+              actBatch = writeBatch(db);
+              actBatchCount = 0;
+            }
+          }
+        }
+        if (actBatchCount > 0) {
+          await actBatch.commit();
+        }
+      } catch (err) {
+        console.warn('Notice: Updating activities references during member compaction:', err);
+      }
+
+      // 7. Update system member counter
+      await setDoc(counterRef, {
+        lastNumber: totalRemaining,
+        format: 'M-{number}',
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch(() => null);
+
+      return {
+        success: true,
+        shiftedCount: shifts.length,
+        totalMembers: totalRemaining,
+      };
+    } catch (err) {
+      console.error('Failed to compact member sequence:', err);
+      throw err;
     }
   },
 

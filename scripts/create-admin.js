@@ -22,7 +22,7 @@ const __dirname = path.dirname(__filename);
 const require = createRequire(new URL('../client/package.json', import.meta.url));
 const { initializeApp } = require('firebase/app');
 const { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } = require('firebase/auth');
-const { getFirestore, doc, setDoc, serverTimestamp } = require('firebase/firestore');
+const { getFirestore, doc, setDoc, serverTimestamp, collection, getDocs, getDoc } = require('firebase/firestore');
 
 // Helper to parse client/.env if process.env is empty
 function loadEnv() {
@@ -94,8 +94,40 @@ async function createAdmin() {
       }
     }
 
-    // 2. Create / Overwrite Firestore document with role = "admin"
+    // 2. Determine Admin serial (Strictly A_1, A_2, A_3... independent of regular members)
     const userDocRef = doc(db, 'users', uid);
+    const existingUserSnap = await getDoc(userDocRef);
+    let adminId = null;
+    let adminCode = null;
+
+    if (existingUserSnap.exists()) {
+      const existingData = existingUserSnap.data();
+      const existingCandidate = existingData.adminId || existingData.memberId;
+      if (existingCandidate && /^A[-_]?\d+$/i.test(existingCandidate)) {
+        adminId = existingData.adminId || existingData.memberId;
+        adminCode = existingData.adminCode || existingData.memberCode || adminId.replace('_', '-');
+      }
+    }
+
+    if (!adminId) {
+      const usersSnap = await getDocs(collection(db, 'users'));
+      let maxAdminNum = 0;
+      usersSnap.docs.forEach((d) => {
+        const data = d.data();
+        const candidates = [d.id, data.adminId, data.adminCode, data.memberId, data.memberCode];
+        candidates.forEach((val) => {
+          const match = String(val || '').trim().match(/^A[-_]?(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (Number.isFinite(num)) maxAdminNum = Math.max(maxAdminNum, num);
+          }
+        });
+      });
+      const nextAdminNum = maxAdminNum + 1;
+      adminId = `A_${nextAdminNum}`;
+      adminCode = `A-${nextAdminNum}`;
+    }
+
     await setDoc(userDocRef, {
       uid,
       fullName,
@@ -104,6 +136,10 @@ async function createAdmin() {
       phone,
       role: 'admin',
       role_name: 'ADMIN',
+      memberId: adminId,
+      memberCode: adminCode,
+      adminId,
+      adminCode,
       isActive: true,
       groupId: 'chhatrapati_group_001',
       groupName: 'Chhatrapati Bachat Gat',
@@ -111,7 +147,7 @@ async function createAdmin() {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
-    console.log(`✔ Firestore document created/updated in users/${uid} with role: "admin"`);
+    console.log(`✔ Firestore document created/updated in users/${uid} with role: "admin", ID: ${adminId} (${adminCode})`);
 
     // 3. Ensure Default Group document exists
     const groupDocRef = doc(db, 'groups', 'chhatrapati_group_001');

@@ -41,52 +41,56 @@ async function resolveUserProfile(currentFirebaseUser) {
     console.warn('Notice: Failed reading users/{uid}:', err);
   }
 
-  // 2. Look up member in subcollection groups/chhatrapati_group_001/members
-  try {
-    // Priority A: If memberId is known from users/{uid}, fetch directly (1 document read)
-    if (memberId) {
-      const memberDocSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', memberId)).catch(() => null);
-      if (memberDocSnap && memberDocSnap.exists()) {
-        const m = memberDocSnap.data();
-        if (!cleanEmail || !m.email || m.email.trim().toLowerCase() === cleanEmail) {
-          memberData = m;
+  const isUserAdmin = (userData?.role || userData?.role_name || '').toLowerCase() === 'admin';
+
+  // 2. Look up member in subcollection groups/chhatrapati_group_001/members (Regular members ONLY)
+  if (!isUserAdmin) {
+    try {
+      // Priority A: If memberId is known from users/{uid}, fetch directly (1 document read)
+      if (memberId) {
+        const memberDocSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', memberId)).catch(() => null);
+        if (memberDocSnap && memberDocSnap.exists()) {
+          const m = memberDocSnap.data();
+          if (!cleanEmail || !m.email || m.email.trim().toLowerCase() === cleanEmail) {
+            memberData = m;
+          }
         }
       }
-    }
 
-    // Priority B: Direct query by email
-    if (!memberData && cleanEmail) {
-      const emailSnap = await getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('email', '==', cleanEmail))).catch(() => ({ docs: [] }));
-      if (emailSnap.docs.length > 0) {
-        memberData = emailSnap.docs[0].data();
-        memberId = emailSnap.docs[0].id;
+      // Priority B: Direct query by email
+      if (!memberData && cleanEmail) {
+        const emailSnap = await getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('email', '==', cleanEmail))).catch(() => ({ docs: [] }));
+        if (emailSnap.docs.length > 0) {
+          memberData = emailSnap.docs[0].data();
+          memberId = emailSnap.docs[0].id;
+        }
       }
-    }
 
-    // Priority C: Direct query by userId / authUid
-    if (!memberData) {
-      const [uidSnap, authUidSnap] = await Promise.all([
-        getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('userId', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
-        getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('authUid', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
-      ]);
+      // Priority C: Direct query by userId / authUid
+      if (!memberData) {
+        const [uidSnap, authUidSnap] = await Promise.all([
+          getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('userId', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
+          getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('authUid', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
+        ]);
 
-      const foundDoc = uidSnap.docs[0] || authUidSnap.docs[0];
-      if (foundDoc) {
-        memberData = foundDoc.data();
-        memberId = foundDoc.id;
+        const foundDoc = uidSnap.docs[0] || authUidSnap.docs[0];
+        if (foundDoc) {
+          memberData = foundDoc.data();
+          memberId = foundDoc.id;
+        }
       }
-    }
 
-    // Priority D: Fallback by direct member ID match
-    if (!memberData) {
-      const directSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', currentFirebaseUser.uid)).catch(() => null);
-      if (directSnap && directSnap.exists()) {
-        memberData = directSnap.data();
-        memberId = directSnap.id;
+      // Priority D: Fallback by direct member ID match
+      if (!memberData) {
+        const directSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', currentFirebaseUser.uid)).catch(() => null);
+        if (directSnap && directSnap.exists()) {
+          memberData = directSnap.data();
+          memberId = directSnap.id;
+        }
       }
+    } catch (err) {
+      console.warn('Notice: Member lookup query:', err);
     }
-  } catch (err) {
-    console.warn('Notice: Member lookup query:', err);
   }
 
   // 3. Resolve active group details
@@ -101,10 +105,16 @@ async function resolveUserProfile(currentFirebaseUser) {
   }
 
   // 4. Resolve full name, phone, and role
-  const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN' || memberData?.role === 'admin' || memberData?.role_name === 'ADMIN';
   const rawRole = isUserAdmin ? 'admin' : (userData?.role || memberData?.role || 'member').toLowerCase();
   const fullName = userData?.fullName || userData?.name || memberData?.fullName || memberData?.name || currentFirebaseUser.displayName || (currentFirebaseUser.email ? currentFirebaseUser.email.split('@')[0] : 'Admin');
   const phone = userData?.phone || memberData?.phone || '';
+
+  const resolvedMemberId = isUserAdmin
+    ? (userData?.adminId || userData?.memberId || 'A_1')
+    : (memberId || memberData?.memberId || '');
+  const resolvedMemberCode = isUserAdmin
+    ? (userData?.adminCode || userData?.memberCode || 'A-1')
+    : (memberData?.memberCode || memberId || '');
 
   const resolvedUser = {
     ...memberData,
@@ -118,11 +128,13 @@ async function resolveUserProfile(currentFirebaseUser) {
     role: rawRole,
     role_name: rawRole.toUpperCase(),
     groupName: currentGroupName,
-    memberId: memberId || userData?.memberId || '',
-    memberCode: memberData?.memberCode || userData?.memberCode || memberId || '',
+    memberId: resolvedMemberId,
+    memberCode: resolvedMemberCode,
+    adminId: isUserAdmin ? resolvedMemberId : undefined,
+    adminCode: isUserAdmin ? resolvedMemberCode : undefined,
   };
 
-  // If user document didn't exist in users/{uid} and is admin, ensure it is saved
+  // If user document didn't exist in users/{uid} and is admin, ensure it is saved with A series
   if (!userData && isUserAdmin) {
     try {
       await setDoc(doc(db, 'users', currentFirebaseUser.uid), {
@@ -134,6 +146,10 @@ async function resolveUserProfile(currentFirebaseUser) {
         phone,
         role: 'admin',
         role_name: 'ADMIN',
+        memberId: resolvedMemberId,
+        memberCode: resolvedMemberCode,
+        adminId: resolvedMemberId,
+        adminCode: resolvedMemberCode,
         isActive: true,
         groupId: 'chhatrapati_group_001',
         groupName: currentGroupName,

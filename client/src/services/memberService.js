@@ -83,7 +83,33 @@ export const memberService = {
   calculateMonthlyMemberStatus,
   getMonthlyPaymentSummary,
   /**
-   * Get next member serial code
+   * Helper to parse member serial number strictly from M series formats (e.g. M_1, M-1, M1)
+   */
+  parseMemberNumber: (val) => {
+    if (!val) return null;
+    const match = String(val).trim().match(/^M[-_]?(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      return Number.isFinite(num) ? num : null;
+    }
+    return null;
+  },
+
+  /**
+   * Helper to parse admin serial number strictly from A series formats (e.g. A_1, A-1, A1)
+   */
+  parseAdminNumber: (val) => {
+    if (!val) return null;
+    const match = String(val).trim().match(/^A[-_]?(\d+)$/i);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      return Number.isFinite(num) ? num : null;
+    }
+    return null;
+  },
+
+  /**
+   * Get next member serial code (Strictly M- series, completely independent of admins)
    */
   getNextMemberCode: async (groupId = DEFAULT_GROUP_ID) => {
     const targetGroupId = groupId || DEFAULT_GROUP_ID;
@@ -94,13 +120,55 @@ export const memberService = {
     let maxNumber = Number(counterSnap?.data()?.lastNumber || 0);
     membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((memberDoc) => {
       const data = memberDoc.data();
-      const candidates = [memberDoc.id, data.memberCode, data.member_code];
+      const candidates = [memberDoc.id, data.memberCode, data.member_code, data.memberId, data.member_id];
       candidates.forEach((value) => {
-        const number = parseInt(String(value || '').replace(/\D/g, ''), 10);
-        if (Number.isFinite(number)) maxNumber = Math.max(maxNumber, number);
+        const num = memberService.parseMemberNumber(value);
+        if (num !== null) maxNumber = Math.max(maxNumber, num);
       });
     });
-    return { success: true, memberCode: `M-${maxNumber + 1}` };
+    const nextNumber = maxNumber + 1;
+    return {
+      success: true,
+      memberNumber: nextNumber,
+      memberId: `M_${nextNumber}`,
+      memberCode: `M-${nextNumber}`,
+    };
+  },
+
+  /**
+   * Get next admin serial code (Strictly A- series, completely independent of regular members)
+   */
+  getNextAdminCode: async () => {
+    try {
+      const usersSnap = await getDocs(collection(db, 'users')).catch(() => ({ docs: [] }));
+      let maxAdminNum = 0;
+      usersSnap.docs.forEach((d) => {
+        const data = d.data();
+        const role = String(data.role || data.role_name || '').toLowerCase();
+        if (role === 'admin' || !role) {
+          const candidates = [d.id, data.adminId, data.adminCode, data.memberId, data.memberCode];
+          candidates.forEach((value) => {
+            const num = memberService.parseAdminNumber(value);
+            if (num !== null) maxAdminNum = Math.max(maxAdminNum, num);
+          });
+        }
+      });
+      const nextAdminNum = maxAdminNum + 1;
+      return {
+        success: true,
+        adminNumber: nextAdminNum,
+        adminId: `A_${nextAdminNum}`,
+        adminCode: `A-${nextAdminNum}`,
+      };
+    } catch (err) {
+      console.error('Failed to get next admin code:', err);
+      return {
+        success: false,
+        adminNumber: 1,
+        adminId: 'A_1',
+        adminCode: 'A-1',
+      };
+    }
   },
 
   /**
@@ -445,11 +513,11 @@ export const memberService = {
         throw new Error(`Duplicate member not added. This ${duplicateField} already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
       }
       let observedMax = Number(counterSnap?.data()?.lastNumber || 0);
-      membersSnap.docs.forEach((d) => {
+      membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((d) => {
         const data = d.data();
-        [d.id, data.memberCode, data.member_code].forEach((value) => {
-          const num = parseInt(String(value || '').replace(/\D/g, ''), 10);
-          if (Number.isFinite(num)) observedMax = Math.max(observedMax, num);
+        [d.id, data.memberCode, data.member_code, data.memberId, data.member_id].forEach((value) => {
+          const num = memberService.parseMemberNumber(value);
+          if (num !== null) observedMax = Math.max(observedMax, num);
         });
       });
 

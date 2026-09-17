@@ -496,6 +496,7 @@ export const memberService = {
         throw new Error(`Duplicate member not added. This name already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
       }
       const codeRes = await memberService.getNextMemberCode(targetGroupId);
+      const nextNumber = codeRes.memberNumber;
       const newMemberId = codeRes.memberId;
       const newMemberCode = codeRes.memberCode;
 

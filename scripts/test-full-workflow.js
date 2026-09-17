@@ -24,13 +24,16 @@ const {
   doc,
   getDoc,
   getFirestore,
+  connectFirestoreEmulator,
   serverTimestamp,
   setDoc,
   writeBatch,
 } = require('firebase/firestore');
+import { assertTestEnvironmentSafety, SAFE_TEST_GROUP_ID, PROD_PROJECT_ID } from './test-guard.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const GROUP_ID = 'shivshahi_group_001';
+// Use dedicated test group ONLY - NEVER use production chhatrapati_group_001
+const GROUP_ID = SAFE_TEST_GROUP_ID; // 'test_group_temp'
 
 function loadEnv() {
   const envPath = path.resolve(__dirname, '../client/.env');
@@ -96,6 +99,18 @@ async function removeTemporaryData(uid) {
 }
 
 async function run() {
+  // Hard safety guard: block test execution against production Firestore
+  await assertTestEnvironmentSafety({
+    projectId: firebaseConfig.projectId,
+    groupId: GROUP_ID,
+    checkEmulatorAlive: true,
+  });
+
+  const emulatorHost = (process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080').trim();
+  const [host, port] = emulatorHost.split(':');
+  connectFirestoreEmulator(adminDb, host, parseInt(port, 10) || 8080);
+  console.log('✔ Connected to Firebase Local Emulator Suite at ' + emulatorHost);
+
   try {
     await signInWithEmailAndPassword(adminAuth, adminEmail, adminPassword);
 

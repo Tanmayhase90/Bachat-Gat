@@ -27,7 +27,7 @@ async function authenticateToken(req, res, next) {
       name: data.fullName || data.name || decoded.name || decoded.email,
       role,
       role_name: role,
-      groupId: data.groupId || 'group_001',
+      groupId: data.groupId || 'chhatrapati_group_001',
       memberId: data.memberId || null,
     };
     return next();

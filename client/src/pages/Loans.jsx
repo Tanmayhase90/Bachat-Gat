@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { loanService } from '../services/loanService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
@@ -21,20 +22,28 @@ import {
 } from 'lucide-react';
 
 const Loans = () => {
-  const { user, isAdmin, isMember, canManageLoans } = useAuth();
+  const { t } = useLanguage();
+  const { user, isAdmin = true } = useAuth();
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
   const { refreshTrigger = 0, openCreateLoan } = outletContext;
 
   const [loans, setLoans] = useState([]);
   const [activeTab, setActiveTab] = useState('ACTIVE'); // 'ACTIVE' | 'CLOSED'
-  const [scope, setScope] = useState('all'); // 'all' | 'my'
   const [activeLoansCount, setActiveLoansCount] = useState(0);
   const [closedLoansCount, setClosedLoansCount] = useState(0);
   const [totalOutstanding, setTotalOutstanding] = useState(0);
   const [totalDisbursed, setTotalDisbursed] = useState(0);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   // Local record repayment modal
   const [isRepayOpen, setIsRepayOpen] = useState(false);
@@ -43,10 +52,7 @@ const Loans = () => {
   const fetchLoans = async () => {
     try {
       setLoading(true);
-      const queryParams = { status: activeTab, search };
-      if (scope === 'my' && user?.memberId) {
-        queryParams.memberId = user.memberId;
-      }
+      const queryParams = { status: activeTab, search: debouncedSearch };
 
       const res = await loanService.getAllLoans(queryParams);
       if (res.success) {
@@ -65,66 +71,64 @@ const Loans = () => {
 
   useEffect(() => {
     fetchLoans();
-  }, [refreshTrigger, activeTab, scope, search]);
+  }, [refreshTrigger, activeTab, debouncedSearch]);
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Group Loans & Repayments</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>{t('loans.title')}</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Track group disbursed loans, monthly interest calculations, and member repayment schedules
+            {t('loans.subtitle')}
           </p>
         </div>
 
-        {isAdmin && (
-          <button onClick={openCreateLoan} className="btn-primary">
-            <Plus size={18} /> + Disburse New Loan
-          </button>
-        )}
+        <button onClick={openCreateLoan} className="btn-primary">
+          <Plus size={18} /> {t('loans.issueLoanBtn')}
+        </button>
       </div>
 
       {/* Summary Metrics Strip */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         <div className="card" style={{ padding: '16px 20px', borderColor: 'var(--primary-light)' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            TOTAL ACTIVE OUTSTANDING
+            {t('loans.summaryOutstandingPrincipal')}
           </span>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
             {formatCurrency(totalOutstanding)}
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            Across {activeLoansCount} active loan(s)
+            {activeLoansCount} {t('loans.activeLoansTab')}
           </span>
         </div>
 
         <div className="card" style={{ padding: '16px 20px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            TOTAL PRINCIPAL DISBURSED
+            {t('loans.summaryTotalDisbursed')}
           </span>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '4px' }}>
             {formatCurrency(totalDisbursed)}
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            {activeLoansCount + closedLoansCount} total loans recorded
+            {activeLoansCount + closedLoansCount} {t('loans.allLoansTab')}
           </span>
         </div>
 
         <div className="card" style={{ padding: '16px 20px' }}>
           <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-            ACTIVE / CLOSED STATUS
+            {t('common.status')}
           </span>
           <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
-            {activeLoansCount} Active <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>/ {closedLoansCount} Closed</span>
+            {activeLoansCount} {t('common.active')} <span style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: 500 }}>/ {closedLoansCount} {t('common.closed')}</span>
           </div>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-            100% group transparency
+            {t('common.appName')}
           </span>
         </div>
       </div>
 
-      {/* Tabs & Search & Scope */}
+      {/* Tabs & Search */}
       <div
         className="card"
         style={{
@@ -143,61 +147,15 @@ const Loans = () => {
               onClick={() => setActiveTab('ACTIVE')}
               className={`tab-btn ${activeTab === 'ACTIVE' ? 'active' : ''}`}
             >
-              Active Loans ({activeLoansCount})
+              {t('loans.activeLoansTab')} ({activeLoansCount})
             </button>
             <button
               onClick={() => setActiveTab('CLOSED')}
               className={`tab-btn ${activeTab === 'CLOSED' ? 'active' : ''}`}
             >
-              Closed / Repaid ({closedLoansCount})
+              {t('loans.closedLoansTab')} ({closedLoansCount})
             </button>
           </div>
-
-          {/* Scope Filter for Members */}
-          {user?.memberId && (
-            <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: 'var(--radius-md)', gap: '4px' }}>
-              <button
-                type="button"
-                onClick={() => setScope('all')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  background: scope === 'all' ? '#FFFFFF' : 'transparent',
-                  color: scope === 'all' ? 'var(--primary)' : 'var(--text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: scope === 'all' ? 'var(--shadow-xs)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Building2 size={13} /> All Group Loans
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope('my')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  background: scope === 'my' ? '#FFFFFF' : 'transparent',
-                  color: scope === 'my' ? 'var(--primary)' : 'var(--text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: scope === 'my' ? 'var(--shadow-xs)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <User size={13} /> My Loans
-              </button>
-            </div>
-          )}
         </div>
 
         <div style={{ position: 'relative', width: '280px' }}>
@@ -210,7 +168,7 @@ const Loans = () => {
             type="text"
             className="form-input"
             style={{ paddingLeft: '36px', fontSize: '0.85rem' }}
-            placeholder="Search member or loan #..."
+            placeholder={t('members.searchPlaceholder')}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -219,19 +177,15 @@ const Loans = () => {
 
       {/* Loans Grid */}
       {loading ? (
-        <Loader text="Loading loans..." />
+        <Loader text={t('common.loadingData')} />
       ) : (!loans || loans.length === 0) ? (
         <div className="card">
           <EmptyState
             icon={HandCoins}
-            title={activeTab === 'ACTIVE' ? (scope === 'my' ? 'You have no active loans' : 'No active loans') : (scope === 'my' ? 'You have no closed loans' : 'No closed loans')}
-            description={
-              activeTab === 'ACTIVE'
-                ? (scope === 'my' ? 'You currently do not have any active loans with the group.' : 'There are currently no active outstanding loans in the group.')
-                : (scope === 'my' ? 'You have no previous closed loans on record.' : 'No loans have been marked as fully repaid yet.')
-            }
-            actionText={scope === 'my' ? 'View All Group Loans' : (isAdmin && activeTab === 'ACTIVE' ? 'Disburse Loan' : undefined)}
-            onAction={scope === 'my' ? () => setScope('all') : openCreateLoan}
+            title={t('loans.noLoansFound')}
+            description={t('loans.noLoansFound')}
+            actionText={isAdmin && activeTab === 'ACTIVE' ? t('loans.issueLoanBtn') : undefined}
+            onAction={openCreateLoan}
           />
         </div>
       ) : (
@@ -262,18 +216,18 @@ const Loans = () => {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                         <h3 style={{ fontSize: '1.15rem', fontWeight: 800 }}>{l.member_name || l.memberName}</h3>
                         {isMyLoan && (
-                          <span className="badge badge-pink" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>MY LOAN</span>
+                          <span className="badge badge-pink" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>{t('members.personalInfo')}</span>
                         )}
                       </div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '2px' }}>
-                        {l.member_code || l.memberCode} • Loan: <code style={{ color: 'var(--primary)' }}>{l.loan_number || l.loanNumber}</code>
+                        {l.member_code || l.memberCode} • <code style={{ color: 'var(--primary)' }}>{l.loan_number || l.loanNumber}</code>
                       </div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)' }}>
                         {formatCurrency(l.principal_amount || l.principalAmount)}
                       </div>
-                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ORIGINAL LOAN</span>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('loans.tablePrincipal')}</span>
                     </div>
                   </div>
 
@@ -283,16 +237,16 @@ const Loans = () => {
                       📅 {formatDate(l.loan_date || l.loanDate || l.issueDate)}
                     </span>
                     <span style={{ fontSize: '0.75rem', background: 'var(--accent-soft)', padding: '3px 8px', borderRadius: 'var(--radius-sm)', color: 'var(--primary)', fontWeight: 600 }}>
-                      Interest: {l.interest_rate || l.interestRate || 2}% / mo
+                      {t('loans.tableInterestRate')}: {l.interest_rate || l.interestRate || 2}% / mo
                     </span>
                   </div>
 
                   {/* Progress Bar & Repaid percentage */}
                   <div style={{ marginBottom: '14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 600, marginBottom: '6px' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Repaid: {repaidPercent}%</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('loans.tablePaidPrincipal')}: {repaidPercent}%</span>
                       <span style={{ color: l.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--success-text)', fontWeight: 700 }}>
-                        Outstanding: {formatCurrency(l.outstanding_amount || l.outstandingAmount || l.pendingPrincipal)}
+                        {t('loans.tableOutstanding')}: {formatCurrency(l.outstanding_amount || l.outstandingAmount || l.pendingPrincipal)}
                       </span>
                     </div>
                     <div style={{ width: '100%', height: '8px', background: '#F1F5F9', borderRadius: 'var(--radius-full)', overflow: 'hidden' }}>
@@ -321,11 +275,11 @@ const Loans = () => {
                     }}
                   >
                     <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Principal Paid:</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{t('loans.tablePaidPrincipal')}:</span>
                       <div style={{ fontWeight: 700, color: 'var(--success-text)' }}>{formatCurrency(l.total_principal_repaid || l.total_principal_paid)}</div>
                     </div>
                     <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Interest Paid:</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{t('loans.tablePaidInterest')}:</span>
                       <div style={{ fontWeight: 700, color: 'var(--primary)' }}>{formatCurrency(l.total_interest_paid)}</div>
                     </div>
                   </div>
@@ -347,7 +301,7 @@ const Loans = () => {
                     className="btn-secondary"
                     style={{ fontSize: '0.8rem', padding: '6px 12px' }}
                   >
-                    <Eye size={14} /> View Details
+                    <Eye size={14} /> {t('common.viewDetails')}
                   </button>
 
                   {isAdmin && l.status === 'ACTIVE' && (
@@ -359,7 +313,7 @@ const Loans = () => {
                       className="btn-outline"
                       style={{ fontSize: '0.8rem', padding: '6px 12px' }}
                     >
-                      <CreditCard size={14} /> Pay Installment
+                      <CreditCard size={14} /> {t('loans.recordRepaymentBtn')}
                     </button>
                   )}
                 </div>
@@ -384,3 +338,4 @@ const Loans = () => {
 };
 
 export default Loans;
+

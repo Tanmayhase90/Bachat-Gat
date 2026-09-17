@@ -1,57 +1,62 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { LanguageProvider } from './context/LanguageContext';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import MainLayout from './components/layout/MainLayout';
 import ErrorBoundary from './components/common/ErrorBoundary';
+import Loader from './components/common/Loader';
 
-// Pages
-import Login from './pages/Login';
-import Register from './pages/Register';
-import Dashboard from './pages/Dashboard';
-import Members from './pages/Members';
-import MemberDetails from './pages/MemberDetails';
-import Savings from './pages/Savings';
-import Loans from './pages/Loans';
-import LoanDetails from './pages/LoanDetails';
-import Reports from './pages/Reports';
-import Settings from './pages/Settings';
+// Pages - Lazy Loaded for optimal initial load performance
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Members = lazy(() => import('./pages/Members'));
+const MemberDetails = lazy(() => import('./pages/MemberDetails'));
+const Savings = lazy(() => import('./pages/Savings'));
+const Loans = lazy(() => import('./pages/Loans'));
+const LoanDetails = lazy(() => import('./pages/LoanDetails'));
+const Reports = lazy(() => import('./pages/Reports'));
+const ReportView = lazy(() => import('./pages/ReportView'));
+const Settings = lazy(() => import('./pages/Settings'));
 
 function App() {
   return (
     <BrowserRouter>
       <ErrorBoundary>
-        <AuthProvider>
-          <Routes>
-            {/* Public Routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Register />} />
-            <Route path="/register" element={<Register />} />
+        <LanguageProvider>
+          <AuthProvider>
+            <Suspense fallback={<Loader fullScreen text="Loading Bachat Gat Admin Portal..." />}>
+              <Routes>
+                {/* Public Route */}
+                <Route path="/login" element={<Login />} />
+                
+                {/* Redirect any legacy member signup/register links to Admin login */}
+                <Route path="/signup" element={<Navigate to="/login" replace />} />
+                <Route path="/register" element={<Navigate to="/login" replace />} />
 
-            {/* Protected Routes */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<MainLayout />}>
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/members" element={<Members />} />
-                <Route path="/members/:id" element={<MemberDetails />} />
-                <Route path="/savings" element={<Savings />} />
-                <Route path="/monthly-savings" element={<Savings />} />
-                <Route path="/loans" element={<Loans />} />
-                <Route path="/loans/:id" element={<LoanDetails />} />
-                <Route path="/reports" element={<Reports />} />
-
-                {/* Admin Only Route */}
-                <Route element={<ProtectedRoute allowedRoles={['ADMIN']} />}>
-                  <Route path="/settings" element={<Settings />} />
+                {/* Admin-Only Protected Routes */}
+                <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+                  <Route element={<MainLayout />}>
+                    <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/members" element={<Members />} />
+                    <Route path="/members/:id" element={<MemberDetails />} />
+                    <Route path="/savings" element={<Savings />} />
+                    <Route path="/monthly-savings" element={<Savings />} />
+                    <Route path="/loans" element={<Loans />} />
+                    <Route path="/loans/:id" element={<LoanDetails />} />
+                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/reports/view" element={<ReportView />} />
+                    <Route path="/settings" element={<Settings />} />
+                  </Route>
                 </Route>
-              </Route>
-            </Route>
 
-            {/* Fallback */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </AuthProvider>
+                {/* Fallback */}
+                <Route path="/" element={<Navigate to="/login" replace />} />
+                <Route path="*" element={<Navigate to="/login" replace />} />
+              </Routes>
+            </Suspense>
+          </AuthProvider>
+        </LanguageProvider>
       </ErrorBoundary>
     </BrowserRouter>
   );

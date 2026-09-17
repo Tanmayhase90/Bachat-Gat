@@ -130,12 +130,12 @@ export const authService = {
       // 2. Update Firebase Auth display name
       await updateFirebaseProfile(user, { displayName: cleanName });
 
-      // 3. Search for existing member document in Firestore groups/shivshahi_group_001/members
+      // 3. Search for existing member document in Firestore groups/chhatrapati_group_001/members
       let existingMember = null;
       let existingMemberId = null;
 
       try {
-        const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members'));
+        const membersSnap = await getDocs(collection(db, 'groups', 'chhatrapati_group_001', 'members'));
         const found = membersSnap.docs.find((d) => {
           const m = d.data();
           return (
@@ -154,8 +154,8 @@ export const authService = {
       }
 
       // Fetch active group details
-      const defaultGroup = await groupService.getGroupDetails('shivshahi_group_001');
-      const groupId = 'shivshahi_group_001';
+      const defaultGroup = await groupService.getGroupDetails('chhatrapati_group_001');
+      const groupId = 'chhatrapati_group_001';
       const groupName = defaultGroup.group?.groupName || defaultGroup.group?.name || 'Chhatrapati Bachat Gat, Ghargaon Stand';
       const monthlyContribution = defaultGroup.group?.monthlyContribution || 1000;
 
@@ -164,7 +164,7 @@ export const authService = {
 
       if (existingMemberId) {
         // Link the existing member document to the newly created Firebase Auth UID
-        const memberDocRef = doc(db, 'groups', 'shivshahi_group_001', 'members', existingMemberId);
+        const memberDocRef = doc(db, 'groups', 'chhatrapati_group_001', 'members', existingMemberId);
         await setDoc(memberDocRef, {
           userId: user.uid,
           authUid: user.uid,
@@ -174,8 +174,8 @@ export const authService = {
           updatedAt: new Date().toISOString(),
         }, { merge: true });
       } else {
-        // Create new member document in 'groups/shivshahi_group_001/members' if none existed
-        const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
+        // Create new member document in 'groups/chhatrapati_group_001/members' if none existed
+        const membersSnap = await getDocs(collection(db, 'groups', 'chhatrapati_group_001', 'members')).catch(() => ({ docs: [] }));
         let maxNum = 0;
         membersSnap.docs.forEach((d) => {
           const num = parseInt(d.id.replace(/\D/g, ''), 10);
@@ -184,7 +184,7 @@ export const authService = {
         memberId = `M_${maxNum + 1}`;
         memberCode = memberId;
 
-        const newMemberDocRef = doc(db, 'groups', 'shivshahi_group_001', 'members', memberId);
+        const newMemberDocRef = doc(db, 'groups', 'chhatrapati_group_001', 'members', memberId);
         await setDoc(newMemberDocRef, {
           id: memberId,
           userId: user.uid,
@@ -282,7 +282,7 @@ export const authService = {
       let linkedMemberId = userData?.memberId || null;
 
       if (linkedMemberId) {
-        const memDoc = await getDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', linkedMemberId));
+        const memDoc = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', linkedMemberId));
         if (memDoc.exists()) {
           linkedMember = memDoc.data();
         }
@@ -290,7 +290,7 @@ export const authService = {
 
       if (!linkedMember) {
         try {
-          const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members'));
+          const membersSnap = await getDocs(collection(db, 'groups', 'chhatrapati_group_001', 'members'));
           const found = membersSnap.docs.find((d) => {
             const m = d.data();
             return (
@@ -308,7 +308,7 @@ export const authService = {
             linkedMemberId = found.id;
 
             // Link member document with this Firebase Auth UID
-            await setDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', linkedMemberId), {
+            await setDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', linkedMemberId), {
               userId: user.uid,
               authUid: user.uid,
               firebaseUid: user.uid,
@@ -337,48 +337,17 @@ export const authService = {
       // 3. Resolve role and full name
       const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN' || linkedMember?.role === 'admin' || linkedMember?.role_name === 'ADMIN';
       const resolvedRole = isUserAdmin ? 'admin' : (userData?.role || linkedMember?.role || 'member').toLowerCase();
-      const resolvedFullName = userData?.fullName || userData?.name || linkedMember?.fullName || linkedMember?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'Member');
+      const resolvedFullName = userData?.fullName || userData?.name || linkedMember?.fullName || linkedMember?.name || user.displayName || (user.email ? user.email.split('@')[0] : 'Admin');
       const resolvedPhone = userData?.phone || linkedMember?.phone || '';
 
-      // If member record still doesn't exist, auto-create one under groups/shivshahi_group_001/members
-      if (!linkedMember) {
-        try {
-          const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
-          let maxNum = 0;
-          membersSnap.docs.forEach((d) => {
-            const num = parseInt(d.id.replace(/\D/g, ''), 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
-          });
-          linkedMemberId = `M_${maxNum + 1}`;
-          const newMemberPayload = {
-            id: linkedMemberId,
-            userId: user.uid,
-            authUid: user.uid,
-            firebaseUid: user.uid,
-            groupId: 'shivshahi_group_001',
-            name: resolvedFullName,
-            fullName: resolvedFullName,
-            email: cleanEmail,
-            phone: resolvedPhone,
-            shares: 1,
-            shareCount: 1,
-            monthlyContribution: 1000,
-            monthlyContributionPerShare: 1000,
-            monthlyHaftaAmount: 1000,
-            status: 'active',
-            joinDate: new Date().toISOString(),
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          };
-          await setDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', linkedMemberId), newMemberPayload, { merge: true });
-          linkedMember = newMemberPayload;
-        } catch (err) {
-          console.warn('Notice: Member auto-creation on login:', err);
-        }
+      // 4. Enforce Web Admin-Only Access Policy
+      if (!isUserAdmin) {
+        await signOut(auth);
+        throw new Error('Access denied. This account does not have Admin privileges. The Web application is restricted to Administrators only.');
       }
 
-      // 4. Save/update user profile in users/{uid}
-      if (!userDoc.exists() || !userData?.memberId) {
+      // 5. Save/update admin user profile in users/{uid}
+      if (!userDoc.exists() || !userData?.role) {
         userData = {
           uid: user.uid,
           id: user.uid,
@@ -386,12 +355,12 @@ export const authService = {
           name: resolvedFullName,
           email: cleanEmail,
           phone: resolvedPhone,
-          role: resolvedRole,
-          role_name: resolvedRole.toUpperCase(),
+          role: 'admin',
+          role_name: 'ADMIN',
           isActive: true,
           memberId: linkedMemberId || '',
           memberCode: linkedMember?.memberCode || linkedMemberId || '',
-          groupId: 'shivshahi_group_001',
+          groupId: 'chhatrapati_group_001',
           groupName: 'Chhatrapati Bachat Gat, Ghargaon Stand',
           createdAt: userData?.createdAt || serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -399,23 +368,14 @@ export const authService = {
         await setDoc(userDocRef, userData, { merge: true });
       }
 
-      // 5. Check if account is active
+      // 6. Check if account is active
       if (userData.isActive === false || linkedMember?.status === 'INACTIVE' || linkedMember?.isActive === false) {
         await signOut(auth);
         throw new Error('Your account is deactivated. Please contact admin.');
       }
 
-      // 6. Enforce Admin Login tab check
-      if (expectedRole) {
-        const reqRole = expectedRole.toLowerCase();
-        if (reqRole === 'admin' && resolvedRole !== 'admin') {
-          await signOut(auth);
-          throw new Error('This account does not have admin access. Please use Member Login.');
-        }
-      }
-
       // 7. Retrieve dynamic group details
-      const groupData = await groupService.getGroupDetails(userData.groupId || 'shivshahi_group_001');
+      const groupData = await groupService.getGroupDetails(userData.groupId || 'chhatrapati_group_001');
       const liveGroupName = groupData.group?.groupName || groupData.group?.name || userData.groupName || 'Chhatrapati Bachat Gat, Ghargaon Stand';
 
       const resolvedUser = {
@@ -427,8 +387,8 @@ export const authService = {
         name: resolvedFullName,
         email: user.email,
         phone: resolvedPhone,
-        role: resolvedRole,
-        role_name: resolvedRole.toUpperCase(),
+        role: 'admin',
+        role_name: 'ADMIN',
         groupName: liveGroupName,
         memberId: linkedMemberId || userData.memberId || '',
         memberCode: linkedMember?.memberCode || userData.memberCode || linkedMemberId || '',
@@ -438,14 +398,15 @@ export const authService = {
 
       return {
         success: true,
-        message: 'Login successful',
+        message: 'Admin login successful',
         token,
         user: resolvedUser,
       };
     } catch (err) {
       if (
-        err.message === 'This account does not have admin access. Please use Member Login.' ||
-        err.message === 'Your account is deactivated. Please contact admin.'
+        err.message.includes('Access denied') ||
+        err.message.includes('This account does not have Admin privileges') ||
+        err.message.includes('deactivated')
       ) {
         throw err;
       }
@@ -478,7 +439,7 @@ export const authService = {
     }
 
     const userData = userDoc.data();
-    const groupData = await groupService.getGroupDetails(userData.groupId || 'shivshahi_group_001');
+    const groupData = await groupService.getGroupDetails(userData.groupId || 'chhatrapati_group_001');
     const liveGroupName = groupData.group?.groupName || userData.groupName || 'Chhatrapati Bachat Gat';
     const userRole = (userData.role || 'member').toLowerCase();
 

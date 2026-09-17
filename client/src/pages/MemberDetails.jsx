@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { memberService } from '../services/memberService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import RecordSavingsModal from '../components/forms/RecordSavingsModal';
 import CreateLoanModal from '../components/forms/CreateLoanModal';
 import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
-import EditMemberLoginModal from '../components/forms/EditMemberLoginModal';
+import EditMemberModal from '../components/forms/EditMemberModal';
+import DeleteMemberModal from '../components/forms/DeleteMemberModal';
 import {
   formatCurrency,
   formatNumber,
@@ -32,12 +34,26 @@ import {
   Save,
   Trash2,
   KeyRound,
+  MessageCircle,
 } from 'lucide-react';
 
 const MemberDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { isAdmin, canManageSavings, canManageLoans, canManageMembers } = useAuth();
+  const { t, language } = useLanguage();
+
+  const selectedMonth = location.state?.selectedMonth
+    ? Number(location.state.selectedMonth)
+    : (sessionStorage.getItem('members_selected_month')
+        ? Number(sessionStorage.getItem('members_selected_month'))
+        : null);
+  const selectedYear = location.state?.selectedYear
+    ? Number(location.state.selectedYear)
+    : (sessionStorage.getItem('members_selected_year')
+        ? Number(sessionStorage.getItem('members_selected_year'))
+        : null);
 
   const [member, setMember] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -52,7 +68,8 @@ const MemberDetails = () => {
   const [isSavingsOpen, setIsSavingsOpen] = useState(false);
   const [isLoanOpen, setIsLoanOpen] = useState(false);
   const [isRepayOpen, setIsRepayOpen] = useState(false);
-  const [isMemberLoginOpen, setIsMemberLoginOpen] = useState(false);
+  const [isEditMemberOpen, setIsEditMemberOpen] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
   const [selectedLoanId, setSelectedLoanId] = useState(null);
 
   const fetchMember = async () => {
@@ -89,19 +106,8 @@ const MemberDetails = () => {
     }
   };
 
-  const handleDeleteMember = async () => {
-    const ok = window.confirm(`Delete member "${member.name}" permanently? This cannot be undone.`);
-    if (!ok) return;
-
-    try {
-      const res = await memberService.deleteMember(id);
-      if (res.success) {
-        navigate('/members');
-      }
-    } catch (err) {
-      console.error('Failed to delete member:', err);
-      alert(err.message || 'Failed to delete member.');
-    }
+  const handleDeleteMember = () => {
+    setIsDeleteOpen(true);
   };
 
   const getRoleBadge = (role) => {
@@ -119,7 +125,13 @@ const MemberDetails = () => {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       {/* Back Button */}
       <button
-        onClick={() => navigate('/members')}
+        onClick={() => navigate('/members', {
+          state: {
+            selectedMonth: selectedMonth || undefined,
+            selectedYear: selectedYear || undefined,
+            activeTab: location.state?.activeTab || undefined,
+          },
+        })}
         style={{
           background: 'none',
           display: 'inline-flex',
@@ -232,9 +244,27 @@ const MemberDetails = () => {
                 <Mail size={15} /> {member.email}
               </span>
               {member.phone && (
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Phone size={15} /> {member.phone}
-                </span>
+                <>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Phone size={15} /> {member.phone}
+                  </span>
+                  <a
+                    href={`https://wa.me/91${member.phone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      color: '#25D366',
+                      fontWeight: 600,
+                      textDecoration: 'none',
+                    }}
+                    title="Send WhatsApp message"
+                  >
+                    <MessageCircle size={15} /> WhatsApp
+                  </a>
+                </>
               )}
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Calendar size={15} /> Joined {formatDate(member.joined_date || member.joinDate || member.joinedAt)}
@@ -256,8 +286,8 @@ const MemberDetails = () => {
             </button>
           )}
           {canManageMembers && (
-            <button onClick={() => setIsMemberLoginOpen(true)} className="btn-outline">
-              <KeyRound size={16} /> Edit / Add Login
+            <button onClick={() => setIsEditMemberOpen(true)} className="btn-outline">
+              <Edit2 size={16} /> Edit Member
             </button>
           )}
           {canManageMembers && (
@@ -488,10 +518,13 @@ const MemberDetails = () => {
 
       {/* Action Modals */}
       <RecordSavingsModal
+        key={`member-details-savings-modal-${id}-${selectedMonth || ''}-${selectedYear || ''}-${isSavingsOpen}`}
         isOpen={isSavingsOpen}
         onClose={() => setIsSavingsOpen(false)}
         onSuccess={fetchMember}
         initialMemberId={id}
+        initialMonth={selectedMonth}
+        initialYear={selectedYear}
       />
 
       <CreateLoanModal
@@ -511,11 +544,18 @@ const MemberDetails = () => {
         initialLoanId={selectedLoanId}
       />
 
-      <EditMemberLoginModal
-        isOpen={isMemberLoginOpen}
-        onClose={() => setIsMemberLoginOpen(false)}
+      <EditMemberModal
+        isOpen={isEditMemberOpen}
+        onClose={() => setIsEditMemberOpen(false)}
         onSuccess={fetchMember}
         member={member}
+      />
+
+      <DeleteMemberModal
+        isOpen={isDeleteOpen}
+        onClose={() => setIsDeleteOpen(false)}
+        member={member}
+        onSuccess={() => navigate('/members')}
       />
     </div>
   );

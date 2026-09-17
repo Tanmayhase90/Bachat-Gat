@@ -359,11 +359,135 @@ textarea:focus-visible,
 /* Animations */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  to { opacity: 1; transform: none; }
 }
 
 .fade-in {
   animation: fadeIn 0.25s ease-out forwards;
+}
+
+/* ==========================================================================
+   MODAL & DIALOG SYSTEM - RESPONSIVE VIEWPORT CENTERING & INTERNAL SCROLL
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: clamp(12px, 3vh, 20px);
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+.modal-dialog {
+  background: var(--bg-card, #FFFFFF);
+  border-radius: var(--radius-xl, 20px);
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  max-height: min(calc(100dvh - 40px), calc(100vh - 40px), 85vh);
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-lg, 0 10px 25px -3px rgba(0, 0, 0, 0.15)), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color, #E2E8F0);
+  overflow: hidden;
+  position: relative;
+  margin: auto;
+  box-sizing: border-box;
+}
+
+.modal-form-wrapper {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-color, #E2E8F0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--primary-gradient-subtle);
+  flex-shrink: 0;
+}
+
+.modal-header h2,
+.modal-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.3;
+}
+
+.modal-close-btn {
+  background: transparent;
+  padding: 6px;
+  border-radius: var(--radius-full);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.modal-close-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 20px 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+}
+
+.modal-footer {
+  padding: 14px 24px;
+  border-top: 1px solid var(--border-color, #E2E8F0);
+  background: var(--bg-card, #FFFFFF);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .modal-overlay {
+    padding: 8px;
+  }
+  .modal-dialog {
+    max-height: calc(100dvh - 16px);
+    border-radius: var(--radius-lg, 16px);
+  }
+  .modal-header {
+    padding: 14px 16px;
+  }
+  .modal-header h2,
+  .modal-title {
+    font-size: 1.05rem;
+  }
+  .modal-body {
+    padding: 16px;
+  }
+  .modal-footer {
+    padding: 12px 16px;
+    gap: 8px;
+  }
 }
 
 /* Tabs */
@@ -432,10 +556,10 @@ textarea:focus-visible,
 
 .dashboard-progress-card,
 .dashboard-activity-card {
-  height: 430px;
-  align-self: start;
+  min-height: 430px;
+  height: auto;
+  align-self: stretch;
   width: 100%;
-  overflow: hidden;
 }
 
 .progress-members-grid {
@@ -516,3 +640,282 @@ textarea:focus-visible,
     min-height: 380px;
   }
 }
+
+/* ==========================================================================
+   PRINT MEDIA STYLES - CLEAN BOX-STYLE FINANCIAL REPORT PRINTING
+   ========================================================================== */
+@media print {
+  /* 0. Suppress browser-generated print header (date/time) & footer (URL/page) */
+  @page {
+    size: auto;
+    margin: 0 !important;
+  }
+
+  /* Force color and background printing */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  /* 1. Hide all application navigation, shell, buttons, modals, dropdowns, filters */
+  header,
+  aside,
+  .sidebar,
+  .mobile-sidebar-overlay,
+  .header,
+  .no-print,
+  .tabs-container,
+  .filter-bar,
+  .report-actions-bar,
+  button,
+  .btn-primary,
+  .btn-secondary,
+  .btn-outline,
+  .language-dropdown-menu,
+  .notifications-dropdown-menu,
+  .modal-overlay,
+  .loader-container,
+  input,
+  select {
+    display: none !important;
+  }
+
+  /* 2. Full-page clean white print container with professional layout & margin preservation */
+  html, body {
+    background: #FFFFFF !important;
+    color: #0F172A !important;
+    margin: 0 !important;
+    padding: 10mm 8mm !important;
+    width: 100% !important;
+    font-size: 10pt !important;
+    -webkit-font-smoothing: subpixel-antialiased !important;
+  }
+
+  .app-container,
+  .main-content,
+  .page-body,
+  .report-view-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    background: transparent !important;
+    display: block !important;
+  }
+
+  /* 3. Report Document & Card Box-Style Presentation */
+  .card {
+    background: #FFFFFF !important;
+    border: 1.5px solid #CBD5E1 !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    padding: 16px !important;
+    margin-bottom: 16px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .card.report-document {
+    border: 1.5px solid #CBD5E1 !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    padding: 20px 24px !important;
+    margin: 0 auto 16px !important;
+    width: 100% !important;
+    background: #FFFFFF !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  /* 4. Report Header */
+  .report-header {
+    border-bottom: 2px solid var(--primary, #BE185D) !important;
+    padding-bottom: 14px !important;
+    margin-bottom: 18px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    text-align: center !important;
+  }
+
+  /* 5. Summary Metric Box Cards */
+  .report-summary-grid {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .report-summary-grid > div {
+    border: 1.5px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    padding: 10px 12px !important;
+    background-color: #F8FAFC !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .report-stat-strip {
+    border: 1.5px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    background: #F8FAFC !important;
+    padding: 8px 12px !important;
+    margin-top: 10px !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: flex !important;
+    gap: 16px !important;
+    flex-wrap: wrap !important;
+  }
+
+  /* 6. Clean Table Grid & Box-Style Cells */
+  .table-responsive,
+  .report-table-wrap {
+    max-height: none !important;
+    overflow: visible !important;
+    margin-bottom: 16px !important;
+    border: 1.5px solid #CBD5E1 !important;
+    border-radius: 8px !important;
+    background: #FFFFFF !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .custom-table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    table-layout: auto !important;
+    font-size: 8pt !important;
+  }
+
+  .custom-table thead {
+    display: table-header-group !important;
+  }
+
+  .custom-table th {
+    background: #F1F5F9 !important;
+    color: #1E293B !important;
+    border: 1px solid #CBD5E1 !important;
+    padding: 6px 5px !important;
+    font-size: 7.5pt !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.02em !important;
+    position: static !important;
+    box-shadow: none !important;
+    text-align: left !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+    word-break: normal !important;
+  }
+
+  .custom-table th[style*="text-align: right"],
+  .custom-table th[style*="text-align:right"] {
+    text-align: right !important;
+  }
+
+  .custom-table td {
+    border: 1px solid #E2E8F0 !important;
+    padding: 5px 5px !important;
+    font-size: 8pt !important;
+    color: #0F172A !important;
+    line-height: 1.25 !important;
+    vertical-align: middle !important;
+    white-space: normal !important;
+    word-break: normal !important;
+  }
+
+  .custom-table td[style*="text-align: right"],
+  .custom-table td[style*="text-align:right"] {
+    text-align: right !important;
+  }
+
+  .custom-table tbody tr {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .custom-table tbody tr:nth-child(even) {
+    background-color: #F8FAFC !important;
+  }
+
+  .custom-table tfoot {
+    display: table-row-group !important;
+    font-weight: 700 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .custom-table tfoot td {
+    background: #F1F5F9 !important;
+    border-top: 2px solid #94A3B8 !important;
+    border-bottom: 1px solid #CBD5E1 !important;
+    font-weight: 800 !important;
+    font-size: 8pt !important;
+  }
+
+  /* 7. Badges and Status Indicators */
+  .badge {
+    display: inline-block !important;
+    padding: 2px 6px !important;
+    font-size: 6.5pt !important;
+    font-weight: 700 !important;
+    border-radius: 4px !important;
+    border: 1px solid currentColor !important;
+  }
+
+  .badge-success {
+    background-color: #ECFDF5 !important;
+    color: #047857 !important;
+    border-color: #A7F3D0 !important;
+  }
+
+  .badge-danger {
+    background-color: #FEE2E2 !important;
+    color: #B91C1C !important;
+    border-color: #FECACA !important;
+  }
+
+  .badge-warning {
+    background-color: #FEF3C7 !important;
+    color: #B45309 !important;
+    border-color: #FDE68A !important;
+  }
+
+  .badge-info {
+    background-color: #EFF6FF !important;
+    color: #1D4ED8 !important;
+    border-color: #BFDBFE !important;
+  }
+
+  .badge-pink {
+    background-color: #FDF2F8 !important;
+    color: #BE185D !important;
+    border-color: #FBCFE8 !important;
+  }
+
+  /* 8. Sections and Signatures Page-Break Management */
+  .report-section {
+    margin-bottom: 18px !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .report-section.avoid-break,
+  .avoid-break {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .report-signatures {
+    margin-top: 24px !important;
+    padding-top: 16px !important;
+    border-top: 1.5px solid #CBD5E1 !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-end !important;
+  }
+}
+

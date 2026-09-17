@@ -1,14 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { memberService } from '../services/memberService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import AddMemberModal from '../components/forms/AddMemberModal';
-import { formatCurrency, formatDate, formatNumber } from '../utils/formatters';
+import RecordSavingsModal from '../components/forms/RecordSavingsModal';
+import { formatCurrency, formatDate, formatNumber, formatMonthYear, formatMonthlyHaftaDueDate } from '../utils/formatters';
 import {
   Users,
   Search,
+  X,
   UserPlus,
   AlertCircle,
   CheckCircle2,
@@ -17,6 +20,7 @@ import {
   ChevronRight,
   Shield,
   Calendar,
+  Clock,
 } from 'lucide-react';
 
 const MONTHS = [
@@ -35,20 +39,31 @@ const MONTHS = [
 ];
 
 const Members = () => {
-  const { canManageMembers, isAdmin } = useAuth();
+  const { canManageMembers, canManageSavings, isAdmin, monthlyHaftaDay } = useAuth();
+  const { t, language } = useLanguage();
   const navigate = useNavigate();
   const location = useLocation();
   const outletContext = useOutletContext() || {};
-  const { refreshTrigger = 0, triggerRefresh, openAddMember } = outletContext;
+  const { refreshTrigger = 0, triggerRefresh, openAddMember, openRecordSavings } = outletContext;
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isRecordSavingsModalOpen, setIsRecordSavingsModalOpen] = useState(false);
+  const [savingsModalProps, setSavingsModalProps] = useState({});
   const [members, setMembers] = useState([]);
   const [activeTab, setActiveTab] = useState(location.state?.activeTab || 'all'); // 'all' | 'pending'
   const [selectedMonth, setSelectedMonth] = useState(
-    location.state?.selectedMonth ? Number(location.state.selectedMonth) : (new Date().getMonth() + 1)
+    location.state?.selectedMonth
+      ? Number(location.state.selectedMonth)
+      : (sessionStorage.getItem('members_selected_month')
+          ? Number(sessionStorage.getItem('members_selected_month'))
+          : (new Date().getMonth() + 1))
   );
   const [selectedYear, setSelectedYear] = useState(
-    location.state?.selectedYear ? Number(location.state.selectedYear) : new Date().getFullYear()
+    location.state?.selectedYear
+      ? Number(location.state.selectedYear)
+      : (sessionStorage.getItem('members_selected_year')
+          ? Number(sessionStorage.getItem('members_selected_year'))
+          : new Date().getFullYear())
   );
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -65,11 +80,34 @@ const Members = () => {
     }
   }, [location.state]);
 
+  useEffect(() => {
+    sessionStorage.setItem('members_selected_month', String(selectedMonth));
+    sessionStorage.setItem('members_selected_year', String(selectedYear));
+  }, [selectedMonth, selectedYear]);
+
   const handleOpenAdd = () => {
     if (openAddMember) {
       openAddMember();
     } else {
       setIsAddModalOpen(true);
+    }
+  };
+
+  const handleRecordSavingForMember = (m) => {
+    const memberId = m.member_id || m.id;
+    if (openRecordSavings) {
+      openRecordSavings({
+        memberId,
+        month: selectedMonth,
+        year: selectedYear,
+      });
+    } else {
+      setSavingsModalProps({
+        memberId,
+        month: selectedMonth,
+        year: selectedYear,
+      });
+      setIsRecordSavingsModalOpen(true);
     }
   };
 
@@ -82,12 +120,23 @@ const Members = () => {
     try {
       setLoading(true);
       const res = await memberService.getAllMembers({
-        search,
         month: selectedMonth,
         year: selectedYear,
       });
       if (res.success) {
-        const memberList = res.members || [];
+        const memberList = (res.members || []).filter(
+          (m) => (m.role || '').toLowerCase() !== 'admin'
+        );
+        memberList.sort((a, b) => {
+          const aId = a.memberId || a.member_id || a.memberCode || a.member_code || a.id || '';
+          const bId = b.memberId || b.member_id || b.memberCode || b.member_code || b.id || '';
+          const aNum = parseInt(String(aId).replace(/\D/g, ''), 10);
+          const bNum = parseInt(String(bId).replace(/\D/g, ''), 10);
+          if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+          if (!isNaN(aNum)) return -1;
+          if (!isNaN(bNum)) return 1;
+          return String(aId).localeCompare(String(bId), undefined, { numeric: true, sensitivity: 'base' });
+        });
         setMembers(memberList);
 
         const total = memberList.length;
@@ -99,7 +148,6 @@ const Members = () => {
           total,
           paid,
           pending,
-          balance: paid + pending === total,
         });
       }
     } catch (err) {
@@ -111,21 +159,56 @@ const Members = () => {
 
   useEffect(() => {
     fetchMembers();
-  }, [refreshTrigger, search, selectedMonth, selectedYear]);
+  }, [refreshTrigger, selectedMonth, selectedYear]);
 
-  const isMemberPending = (m) => m.status === 'Pending' || m.due_status === 'Pending' || m.paymentStatus === 'Pending' || (m.current_due > 0 || m.currentDue > 0 || m.is_pending_dues || m.isPendingDues);
-  const displayedMembers = activeTab === 'all'
-    ? members
-    : members.filter(isMemberPending);
+  const isMemberPending = (m) => {
+    if (!m) return false;
+    if (m.isPaid === true || m.has_paid_current_month === true || m.hasPaidCurrentMonth === true) return false;
+    if (m.status === 'Paid') return false;
+    if (m.isPending === true || m.is_pending_dues === true || m.isPendingDues === true) return true;
+    if (m.status === 'Pending' || m.status === 'Partially Paid') return true;
+    if (m.current_due !== undefined && m.current_due > 0) return true;
+    return false;
+  };
 
-  const pendingCount = members.filter(isMemberPending).length;
+  const pendingMembersList = members.filter(isMemberPending);
+  const pendingCount = pendingMembersList.length;
+  const displayedMembers = activeTab === 'pending' ? pendingMembersList : members;
+
+  // Real-time case-insensitive search by Name, Member Code, and Phone Number
+  const searchLower = search.trim().toLowerCase();
+  const filteredMembers = displayedMembers.filter((m) => {
+    if (!searchLower) return true;
+    const name = String(m.name || m.fullName || m.full_name || '').toLowerCase();
+    const code = String(m.memberCode || m.member_code || m.code || m.id || '').toLowerCase();
+    const phone = String(m.phone || m.mobile || m.phoneNumber || m.phone_number || m.mobileNumber || m.mobile_number || '').toLowerCase();
+    return name.includes(searchLower) || code.includes(searchLower) || phone.includes(searchLower);
+  });
+
+  // Sort all members by Member ID in ascending numerical order before displaying them (e.g. M_1, M_2 ... M_9, M_10 ... M_99, M_100 ... M_364)
+  const sortedMembers = [...filteredMembers].sort((a, b) => {
+    const aId = a.memberId || a.member_id || a.memberCode || a.member_code || a.id || '';
+    const bId = b.memberId || b.member_id || b.memberCode || b.member_code || b.id || '';
+    const aNum = parseInt(String(aId).replace(/\D/g, ''), 10);
+    const bNum = parseInt(String(bId).replace(/\D/g, ''), 10);
+    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+    if (!isNaN(aNum)) return -1;
+    if (!isNaN(bNum)) return 1;
+    return String(aId).localeCompare(String(bId), undefined, { numeric: true, sensitivity: 'base' });
+  });
 
   const getRoleBadge = (role) => {
-    const r = (role || 'MEMBER').toUpperCase();
-    if (r === 'ADMIN') return <span className="badge badge-pink">ADMIN</span>;
-    if (r === 'TREASURER') return <span className="badge badge-warning">TREASURER</span>;
-    if (r === 'SECRETARY') return <span className="badge badge-info">SECRETARY</span>;
-    return <span className="badge badge-success">MEMBER</span>;
+    const roleKey = (role || 'MEMBER').toUpperCase();
+    const roleLabel = t(`common.roles.${roleKey}`, role || 'Member');
+    switch (roleKey) {
+      case 'TREASURER':
+        return <span className="badge badge-warning">{roleLabel}</span>;
+      case 'SECRETARY':
+        return <span className="badge badge-info">{roleLabel}</span>;
+      case 'MEMBER':
+      default:
+        return <span className="badge badge-success">{roleLabel}</span>;
+    }
   };
 
   return (
@@ -133,13 +216,32 @@ const Members = () => {
       {/* Top Header & Action Row */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Group Members</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>{t('members.title')}</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Manage registered members, assigned roles, monthly shares, and pending dues for {MONTHS.find((m) => m.value === selectedMonth)?.label} {selectedYear}
+            {t('members.subtitle')} ({t(`common.months.${selectedMonth}`)} {selectedYear})
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {/* Monthly Hafta Due Date Badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-soft)',
+              border: '1px solid rgba(236, 72, 153, 0.25)',
+              color: 'var(--primary)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <Clock size={14} />
+            <span>{formatMonthlyHaftaDueDate(monthlyHaftaDay, language)}</span>
+          </div>
+
           {/* Month / Year Filter Pickers */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'var(--bg-subtle)', padding: '6px 12px', borderRadius: 'var(--radius-md)' }}>
             <Calendar size={16} color="var(--primary)" />
@@ -158,7 +260,7 @@ const Members = () => {
             >
               {MONTHS.map((m) => (
                 <option key={m.value} value={m.value}>
-                  {m.label}
+                  {t(`common.months.${m.value}`, m.label)}
                 </option>
               ))}
             </select>
@@ -197,7 +299,7 @@ const Members = () => {
                 gap: '8px',
               }}
             >
-              <UserPlus size={18} /> + Add Member
+              <UserPlus size={18} /> {t('members.addMemberBtn')}
             </button>
           )}
         </div>
@@ -227,7 +329,7 @@ const Members = () => {
               fontSize: '0.875rem',
             }}
           >
-            All Members ({members.length})
+            {t('members.allMembersTab')} ({members.length})
           </button>
 
           <button
@@ -244,71 +346,87 @@ const Members = () => {
               gap: '6px',
             }}
           >
-            Pending Dues ({pendingCount})
+            {t('members.pendingDuesTab')} ({pendingCount})
           </button>
         </div>
 
-        {/* Action Controls: [+ Add Member] [ 🔍 Search Bar ] */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
-          {(canManageMembers || isAdmin) && (
+        {/* Search Input */}
+        <div style={{ position: 'relative', flex: '1 1 280px', maxWidth: '360px', minWidth: '220px' }}>
+          <Search
+            size={18}
+            style={{
+              position: 'absolute',
+              left: '12px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: 'var(--text-muted)',
+              pointerEvents: 'none',
+            }}
+          />
+          <input
+            type="text"
+            className="form-input"
+            style={{
+              paddingLeft: '38px',
+              paddingRight: search ? '36px' : '12px',
+              fontSize: '0.875rem',
+              width: '100%',
+              borderRadius: 'var(--radius-md)',
+              border: '1.5px solid var(--border-color)',
+            }}
+            placeholder={language === 'mr' ? 'नाव, सभासद कोड किंवा फोन नंबरने शोधा...' : 'Search by name, member code, or phone...'}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
             <button
-              onClick={handleOpenAdd}
-              className="btn-primary"
-              style={{
-                padding: '9px 18px',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              <UserPlus size={16} /> + Add Member
-            </button>
-          )}
-
-          {/* Search Input */}
-          <div style={{ position: 'relative', width: '260px' }}>
-            <Search
-              size={18}
+              type="button"
+              onClick={() => setSearch('')}
               style={{
                 position: 'absolute',
-                left: '12px',
+                right: '10px',
                 top: '50%',
                 transform: 'translateY(-50%)',
+                background: 'transparent',
+                border: 'none',
                 color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
-            />
-            <input
-              type="text"
-              className="form-input"
-              style={{ paddingLeft: '38px', paddingRight: '12px', fontSize: '0.875rem' }}
-              placeholder="Search by name, code, phone..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
+              title={language === 'mr' ? 'शोध साफ करा' : 'Clear search'}
+              aria-label="Clear search"
+            >
+              <X size={15} />
+            </button>
+          )}
         </div>
       </div>
 
       {/* Members Grid / Cards */}
       {loading ? (
-        <Loader text="Fetching member records..." />
-      ) : displayedMembers.length === 0 ? (
+        <Loader text={t('common.loadingData')} />
+      ) : sortedMembers.length === 0 ? (
         <EmptyState
-          icon={Users}
-          title={activeTab === 'pending' ? 'No Pending Dues!' : 'No Members Found'}
-          description={
-            activeTab === 'pending'
-              ? 'All active members have successfully contributed their monthly savings.'
-              : 'Try modifying your search or register a new member.'
+          icon={searchLower ? Search : Users}
+          title={
+            searchLower
+              ? (language === 'mr' ? 'कोणताही सभासद सापडला नाही' : 'No members found matching your search')
+              : (activeTab === 'pending' ? t('dashboard.allMembersPaid') : t('members.noMembersFound'))
           }
-          actionText={canManageMembers && activeTab === 'all' ? 'Add Member' : undefined}
+          description={
+            searchLower
+              ? (language === 'mr' ? `"${search}" शी जुळणारा कोणताही सभासद आढळला नाही.` : `No members match "${search}". Try searching with a different name, code, or phone number.`)
+              : (activeTab === 'pending' ? t('dashboard.allMembersPaid') : t('members.noMembersFound'))
+          }
+          actionText={!searchLower && canManageMembers && activeTab === 'all' ? t('members.addMemberBtn') : undefined}
           onAction={openAddMember}
         />
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
-          {displayedMembers.map((m) => {
+          {sortedMembers.map((m) => {
             const isPending = isMemberPending(m);
             const memberDue = isPending ? (m.current_due !== undefined ? m.current_due : (m.currentDue !== undefined ? m.currentDue : 1000)) : 0;
             const memberPaid = Number(m.paid_amount ?? m.paidAmount ?? 0);
@@ -320,11 +438,11 @@ const Members = () => {
                 className="card keyboard-card"
                 role="link"
                 tabIndex={0}
-                onClick={() => navigate(`/members/${m.member_id || m.id}`)}
+                onClick={() => navigate(`/members/${m.member_id || m.id}`, { state: { selectedMonth, selectedYear, activeTab } })}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault();
-                    navigate(`/members/${m.member_id || m.id}`);
+                    navigate(`/members/${m.member_id || m.id}`, { state: { selectedMonth, selectedYear, activeTab } });
                   }
                 }}
                 aria-label={`Open ${m.name} member profile`}
@@ -334,9 +452,9 @@ const Members = () => {
                   flexDirection: 'column',
                   justifyContent: 'space-between',
                   padding: '20px',
-                  borderLeft: activeTab === 'pending'
+                  borderLeft: isPending
                     ? (memberPaid > 0 ? '4px solid var(--warning)' : '4px solid var(--danger)')
-                    : '4px solid var(--primary)',
+                    : '4px solid var(--success, #10B981)',
                 }}
               >
                 <div>
@@ -360,9 +478,9 @@ const Members = () => {
                         {(m.name || 'M').slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)' }}>{m.name}</h3>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                          {m.member_code || m.memberCode || m.id} • Joined {formatDate(m.joined_date || m.joinDate || m.joinedAt, { month: 'short', year: 'numeric' })}
+                        <h3 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>{m.name}</h3>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600, marginTop: '2px' }}>
+                          {m.member_code || m.memberCode || m.id} • {formatDate(m.joined_date || m.joinDate || m.joinedAt, { month: 'short', year: 'numeric' })}
                         </div>
                       </div>
                     </div>
@@ -370,89 +488,134 @@ const Members = () => {
                     {getRoleBadge(m.role_name || m.role)}
                   </div>
 
-                  {/* Payment Status Block - ONLY rendered in Pending Dues tab */}
-                  {activeTab === 'pending' ? (
-                    <div
-                      style={{
-                        background: memberPaid > 0 ? 'var(--warning-light, #FFFBEB)' : 'var(--danger-light, #FFF1F2)',
-                        padding: '10px 14px',
-                        borderRadius: 'var(--radius-md)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        marginBottom: '14px',
-                        border: `1px solid ${memberPaid > 0 ? 'rgba(245, 158, 11, 0.25)' : 'rgba(239, 68, 68, 0.2)'}`,
-                      }}
-                    >
-                      <div>
-                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
-                          Current Dues
-                        </span>
-                        <div
-                          style={{
-                            fontSize: '1.15rem',
-                            fontWeight: 800,
-                            color: memberPaid > 0 ? 'var(--warning-text, #B45309)' : 'var(--danger-text, #DC2626)',
-                          }}
-                        >
-                          {formatCurrency(memberDue)}
-                        </div>
-                      </div>
-
-                      <span
+                  {/* Month + Year Payment Status Block */}
+                  <div
+                    style={{
+                      background: isPending
+                        ? (memberPaid > 0 ? 'var(--warning-light, #FFFBEB)' : 'var(--danger-light, #FFF1F2)')
+                        : 'var(--success-light, #ECFDF5)',
+                      padding: '10px 14px',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '10px',
+                      border: `1px solid ${
+                        isPending
+                          ? (memberPaid > 0 ? 'rgba(245, 158, 11, 0.25)' : 'rgba(239, 68, 68, 0.2)')
+                          : 'rgba(16, 185, 129, 0.25)'
+                      }`,
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
+                        {formatMonthYear(selectedMonth, selectedYear)}
+                      </span>
+                      <div
                         style={{
-                          fontSize: '0.8rem',
-                          fontWeight: 700,
-                          color: memberPaid > 0 ? 'var(--warning-text, #B45309)' : 'var(--danger-text, #DC2626)',
+                          fontSize: '0.85rem',
+                          fontWeight: 800,
+                          color: isPending
+                            ? (memberPaid > 0 ? 'var(--warning-text, #B45309)' : 'var(--danger-text, #DC2626)')
+                            : 'var(--success-text, #059669)',
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '4px',
+                          gap: '5px',
+                          marginTop: '2px',
                         }}
                       >
-                        {memberPaid > 0 ? (
+                        {isPending ? (
                           <>
-                            <AlertCircle size={14} /> Partially Paid
+                            <AlertCircle size={15} />
+                            <span>{t('common.pending', 'Pending')}</span>
                           </>
                         ) : (
                           <>
-                            <AlertCircle size={14} /> Pending
+                            <CheckCircle2 size={15} />
+                            <span>{t('common.paid', 'Paid')}</span>
                           </>
                         )}
-                      </span>
+                      </div>
                     </div>
-                  ) : (
-                    /* All Members Tab: Shows clean monthly share box without payment status */
-                    <div
+
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                        {isPending ? t('members.tableCurrentDues', 'Due') : t('savings.paidAmount', 'Paid')}
+                      </span>
+                      <div
+                        style={{
+                          fontSize: '1.1rem',
+                          fontWeight: 800,
+                          color: isPending
+                            ? (memberPaid > 0 ? 'var(--warning-text, #B45309)' : 'var(--danger-text, #DC2626)')
+                            : 'var(--success-text, #059669)',
+                        }}
+                      >
+                        {formatCurrency(isPending ? (memberDue > 0 ? memberDue : memberMonthlyShare) : (memberPaid > 0 ? memberPaid : memberMonthlyShare))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Direct "Record Saving" / "Collect" Button for Pending Member (Pending Dues Tab Only) */}
+                  {activeTab === 'pending' && isPending && (canManageSavings || isAdmin || canManageMembers) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRecordSavingForMember(m);
+                      }}
+                      className="btn-primary"
                       style={{
-                        background: 'var(--bg-subtle, #F8FAFC)',
-                        padding: '8px 12px',
-                        borderRadius: 'var(--radius-md)',
+                        width: '100%',
+                        padding: '8px 14px',
+                        fontSize: '0.85rem',
+                        fontWeight: 700,
                         display: 'flex',
-                        justifyContent: 'space-between',
                         alignItems: 'center',
-                        marginBottom: '14px',
-                        border: '1px solid var(--border-color, #E2E8F0)',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        marginBottom: '12px',
+                        borderRadius: 'var(--radius-md)',
+                        boxShadow: 'var(--shadow-pink)',
+                        cursor: 'pointer',
                       }}
                     >
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                        Monthly Share
-                      </span>
-                      <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>
-                        {formatCurrency(memberMonthlyShare)}/mo
-                      </span>
-                    </div>
+                      <PiggyBank size={15} />
+                      {t('savings.recordSavingsBtn', 'Record Saving')}
+                    </button>
                   )}
+
+                  {/* Monthly Share Box */}
+                  <div
+                    style={{
+                      background: 'var(--bg-subtle, #F8FAFC)',
+                      padding: '8px 12px',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '14px',
+                      border: '1px solid var(--border-color, #E2E8F0)',
+                    }}
+                  >
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                      {t('members.tableMonthlyShare')}
+                    </span>
+                    <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--primary)' }}>
+                      {formatCurrency(memberMonthlyShare)}/mo
+                    </span>
+                  </div>
 
                   {/* Savings & Loan Highlights */}
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '0.825rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                       <PiggyBank size={15} color="var(--primary)" />
-                      <span>Total: {formatCurrency(m.total_savings || m.totalSavings)}</span>
+                      <span>{t('dashboard.totalSavings')}: {formatCurrency(m.total_savings || m.totalSavings)}</span>
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-secondary)' }}>
                       <HandCoins size={15} color="var(--warning)" />
-                      <span>Loans: {formatCurrency(m.outstanding_loans || m.activeLoanAmount)}</span>
+                      <span>{t('dashboard.activeLoans')}: {formatCurrency(m.outstanding_loans || m.activeLoanAmount)}</span>
                     </div>
                   </div>
                 </div>
@@ -470,7 +633,7 @@ const Members = () => {
                   fontWeight: 600,
                 }}
               >
-                <span>View Full Member Profile</span>
+                <span>{t('members.memberDetails')}</span>
                 <ChevronRight size={16} />
               </div>
             </div>
@@ -484,6 +647,20 @@ const Members = () => {
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         onSuccess={handleSuccess}
+      />
+
+      {/* Record Savings Modal */}
+      <RecordSavingsModal
+        key={`members-savings-modal-${savingsModalProps.memberId || ''}-${savingsModalProps.month || selectedMonth}-${savingsModalProps.year || selectedYear}-${isRecordSavingsModalOpen}`}
+        isOpen={isRecordSavingsModalOpen}
+        onClose={() => {
+          setIsRecordSavingsModalOpen(false);
+          setSavingsModalProps({});
+        }}
+        onSuccess={handleSuccess}
+        initialMemberId={savingsModalProps.memberId || null}
+        initialMonth={savingsModalProps.month || selectedMonth}
+        initialYear={savingsModalProps.year || selectedYear}
       />
     </div>
   );

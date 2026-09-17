@@ -1,14 +1,36 @@
 import React, { useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
-const Modal = ({ isOpen, onClose, title, children, maxWidth = '550px' }) => {
+const Modal = ({
+  isOpen,
+  onClose,
+  title,
+  children,
+  maxWidth = '560px',
+  footer = null,
+  onSubmit = null,
+  bodyStyle = {},
+  dialogStyle = {},
+  overlayStyle = {},
+  className = '',
+  headerAction = null,
+}) => {
   const dialogRef = useRef(null);
   const bodyRef = useRef(null);
   const previousFocusRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        const allModals = document.querySelectorAll('.modal-dialog');
+        if (allModals.length > 0 && allModals[allModals.length - 1] === dialogRef.current) {
+          e.stopPropagation();
+          onCloseRef.current?.();
+        }
+      }
       if (e.key !== 'Tab' || !dialogRef.current) return;
 
       const elements = Array.from(dialogRef.current.querySelectorAll(
@@ -31,95 +53,89 @@ const Modal = ({ isOpen, onClose, title, children, maxWidth = '550px' }) => {
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', handleKeyDown);
       requestAnimationFrame(() => {
-        const firstField = bodyRef.current?.querySelector(
-          '[data-autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
-        );
-        firstField?.focus();
+        if (!dialogRef.current?.contains(document.activeElement)) {
+          const firstField = bodyRef.current?.querySelector(
+            '[data-autofocus], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])'
+          );
+          firstField?.focus();
+        }
       });
     } else {
-      document.body.style.overflow = 'auto';
+      const otherModals = document.querySelectorAll('.modal-overlay');
+      if (otherModals.length <= 1) {
+        document.body.style.overflow = 'auto';
+      }
     }
     return () => {
-      document.body.style.overflow = 'auto';
+      const otherModals = document.querySelectorAll('.modal-overlay');
+      if (otherModals.length <= 1) {
+        document.body.style.overflow = 'auto';
+      }
       window.removeEventListener('keydown', handleKeyDown);
       previousFocusRef.current?.focus?.();
     };
-  }, [isOpen, onClose]);
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: 'rgba(15, 23, 42, 0.65)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        padding: '16px',
-      }}
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        className="fade-in"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        style={{
-          background: 'var(--bg-card)',
-          borderRadius: 'var(--radius-xl)',
-          width: '100%',
-          maxWidth,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          boxShadow: 'var(--shadow-lg)',
-          border: '1px solid var(--border-color)',
-          display: 'flex',
-          flexDirection: 'column',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Modal Header */}
-        <div
-          style={{
-            padding: '20px 24px',
-            borderBottom: '1px solid var(--border-color)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            background: 'var(--primary-gradient-subtle)',
-          }}
-        >
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)' }}>{title}</h2>
+  const innerContent = (
+    <>
+      {/* Modal Header */}
+      <div className="modal-header" style={{ position: 'relative', zIndex: 100 }}>
+        <h2 className="modal-title">{title}</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {headerAction}
           <button
+            type="button"
+            className="modal-close-btn"
             onClick={onClose}
-            style={{
-              background: 'transparent',
-              padding: '6px',
-              borderRadius: 'var(--radius-full)',
-              color: 'var(--text-secondary)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
             aria-label="Close Modal"
           >
             <X size={20} />
           </button>
         </div>
+      </div>
 
-        {/* Modal Body */}
-        <div ref={bodyRef} style={{ padding: '24px' }}>{children}</div>
+      {/* Modal Body (Scrollable Center Area) */}
+      <div ref={bodyRef} className="modal-body" style={bodyStyle}>
+        {children}
+      </div>
+
+      {/* Modal Footer (Pinned Action Buttons) */}
+      {footer && (
+        <div className="modal-footer">
+          {footer}
+        </div>
+      )}
+    </>
+  );
+
+  const modalElement = (
+    <div className="modal-overlay" style={overlayStyle} onClick={onClose}>
+      <div
+        ref={dialogRef}
+        className={`modal-dialog fade-in ${className}`.trim()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === 'string' ? title : 'Modal Dialog'}
+        style={{ maxWidth, ...dialogStyle }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {onSubmit ? (
+          <form onSubmit={onSubmit} className="modal-form-wrapper">
+            {innerContent}
+          </form>
+        ) : (
+          innerContent
+        )}
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined'
+    ? createPortal(modalElement, document.body)
+    : modalElement;
 };
 
 export default Modal;
+

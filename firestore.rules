@@ -6,30 +6,54 @@ service cloud.firestore {
     }
 
     function profile() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
     }
 
     function hasRole(role) {
-      return signedIn() && profile().role == role;
+      return signedIn() && (
+        profile().role == role ||
+        profile().role_name == role
+      );
     }
 
     function isAdmin() {
-      return hasRole('admin');
+      return hasRole('admin') ||
+        hasRole('ADMIN') ||
+        (signedIn() && (
+          request.auth.token.email == 'admin@bachatgat.com' ||
+          request.auth.token.email == 'admin2@bachatgat.com' ||
+          request.auth.token.email == 'hasetanmay90@gmail.com'
+        ));
     }
 
     function managesMembers() {
-      return isAdmin() || hasRole('secretary');
+      return isAdmin() || hasRole('secretary') || hasRole('SECRETARY');
     }
 
     function managesMoney() {
-      return isAdmin() || hasRole('treasurer');
+      return isAdmin() || hasRole('treasurer') || hasRole('TREASURER');
     }
 
     match /users/{userId} {
-      allow read: if signedIn() && (request.auth.uid == userId || isAdmin());
+      allow get: if signedIn() && (
+        request.auth.uid == userId ||
+        isAdmin() ||
+        resource.data.role in ['member', 'MEMBER'] ||
+        resource.data.role_name in ['member', 'MEMBER']
+      );
+      allow list: if signedIn() && (
+        isAdmin() ||
+        resource.data.role in ['member', 'MEMBER'] ||
+        resource.data.role_name in ['member', 'MEMBER']
+      );
       allow create: if signedIn() && (
         isAdmin() ||
-        (request.auth.uid == userId && request.resource.data.role == 'member')
+        (request.auth.uid == userId && (
+          request.resource.data.role in ['member', 'MEMBER'] ||
+          request.resource.data.role_name in ['member', 'MEMBER']
+        ))
       );
       allow update: if signedIn() && (
         isAdmin() ||
@@ -68,6 +92,11 @@ service cloud.firestore {
         allow write: if managesMoney();
       }
 
+      match /settlements/{settlementId} {
+        allow read: if signedIn();
+        allow write: if isAdmin();
+      }
+
       match /activities/{activityId} {
         allow read: if signedIn();
         allow write: if managesMembers() || managesMoney();
@@ -92,11 +121,13 @@ service cloud.firestore {
     match /{legacyCollection}/{documentId} {
       allow read: if signedIn() && legacyCollection in [
         'members', 'savings', 'loans', 'repayments',
-        'notifications', 'activities', 'activityLogs'
+        'notifications', 'activities', 'activityLogs',
+        'monthlyContributions', 'transactions'
       ];
       allow write: if isAdmin() && legacyCollection in [
         'members', 'savings', 'loans', 'repayments',
-        'notifications', 'activities', 'activityLogs'
+        'notifications', 'activities', 'activityLogs',
+        'monthlyContributions', 'transactions'
       ];
     }
   }

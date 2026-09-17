@@ -54,14 +54,14 @@ async function seedFirebase() {
 
   try {
     // 1. Seed Group Document
-    const groupId = 'group_001';
-    console.log('📌 Seeding Group [group_001]...');
+    const groupId = 'chhatrapati_group_001';
+    console.log('📌 Seeding Group [chhatrapati_group_001]...');
     await setDoc(doc(db, 'groups', groupId), {
       groupId,
       groupName: 'Chhatrapati Bachat Gat',
       group_name: 'Chhatrapati Bachat Gat',
-      groupCode: 'shivshahi_group_001',
-      group_code: 'shivshahi_group_001',
+      groupCode: 'chhatrapati_group_001',
+      group_code: 'chhatrapati_group_001',
       monthlyContribution: 1000,
       monthly_contribution_per_share: 1000,
       monthlyTarget: 363000,

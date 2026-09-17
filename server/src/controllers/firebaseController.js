@@ -46,7 +46,7 @@ async function updateGroupDetails(req, res, next) {
       groupName: body.group_name || body.groupName,
       group_name: body.group_name || body.groupName,
       monthlyContribution: number(body.monthly_contribution_per_share || body.monthlyContribution) || 1000,
-      monthlyTarget: number(body.monthly_target || body.monthlyTarget) || 363000,
+      monthlyTarget: number(body.monthly_target || body.monthlyTarget) || 0,
       description: body.description || '', updatedAt: new Date().toISOString(),
     };
     await db.collection('groups').doc(id).set(update, { merge: true });
@@ -71,14 +71,90 @@ async function getMemberById(req, res) { const members = await getCollection('me
 async function createMember(req, res, next) { try { const ref = db.collection('members').doc(); const member = { id: ref.id, ...req.body, groupId: groupIdOf(req), status: 'ACTIVE', isActive: true, createdAt: new Date().toISOString() }; await ref.set(member); res.status(201).json({ success: true, memberId: ref.id }); } catch (err) { next(err); } }
 async function updateMember(req, res, next) { try { await db.collection('members').doc(req.params.id).set({ ...req.body, updatedAt: new Date().toISOString() }, { merge: true }); res.json({ success: true, message: 'Member updated successfully.' }); } catch (err) { next(err); } }
 async function deleteMember(req, res, next) { try { await db.collection('members').doc(req.params.id).set({ status: 'INACTIVE', isActive: false }, { merge: true }); res.json({ success: true, message: 'Member deactivated successfully.' }); } catch (err) { next(err); } }
+async function getAllSavings(req, res) {
+  let savings = await getCollection('savings', groupIdOf(req));
+  const { month, year, memberId, search } = req.query;
+  if (month) savings = savings.filter((s) => number(s.month) === number(month));
+  if (year) savings = savings.filter((s) => number(s.year) === number(year));
+  if (memberId) savings = savings.filter((s) => s.memberId === memberId);
+  if (search) {
+    const members = await getCollection('members', groupIdOf(req));
+    const ids = members.filter((m) => `${m.fullName || m.name} ${m.memberCode}`.toLowerCase().includes(search.toLowerCase())).map((m) => m.id);
+    savings = savings.filter((s) => ids.includes(s.memberId));
+  }
+  res.json({ success: true, count: savings.length, totalAmount: savings.reduce((sum, s) => sum + number(s.amount), 0), savings });
+}
 
-async function getAllSavings(req, res) { let savings = await getCollection('savings', groupIdOf(req)); const { month, year, memberId, search } = req.query; if (month) savings = savings.filter((s) => number(s.month) === number(month)); if (year) savings = savings.filter((s) => number(s.year) === number(year)); if (memberId) savings = savings.filter((s) => s.memberId === memberId); if (search) { const members = await getCollection('members', groupIdOf(req)); const ids = members.filter((m) => `${m.fullName || m.name} ${m.memberCode}`.toLowerCase().includes(search.toLowerCase())).map((m) => m.id); savings = savings.filter((s) => ids.includes(s.memberId)); } res.json({ success: true, count: savings.length, totalAmount: savings.reduce((sum, s) => sum + number(s.amount), 0), savings }); }
-async function recordSavings(req, res, next) { try { const { member_id, amount, month, year } = req.body; const existing = (await getCollection('savings', groupIdOf(req))).some((s) => s.memberId === member_id && number(s.month) === number(month) && number(s.year) === number(year)); if (existing) return res.status(400).json({ success: false, message: 'Savings for this member and period is already recorded.' }); const ref = db.collection('savings').doc(); await ref.set({ id: ref.id, ...req.body, memberId: member_id, groupId: groupIdOf(req), amount: number(amount), createdAt: new Date().toISOString() }); res.status(201).json({ success: true, savingsId: ref.id }); } catch (err) { next(err); } }
+async function recordSavings(req, res, next) {
+  try {
+    const { member_id, amount, month, year } = req.body;
+    const members = await getCollection('members', groupIdOf(req));
+    const member = members.find((m) => m.id === member_id);
+    const memberName = member ? (member.fullName || member.name || 'this member') : 'this member';
+    const monthNames = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    const monthName = monthNames[number(month) - 1] || `Month ${month}`;
+
+    const existing = (await getCollection('savings', groupIdOf(req))).some(
+      (s) => (s.memberId === member_id || s.member_id === member_id) && number(s.month) === number(month) && number(s.year) === number(year)
+    );
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: `Saving already recorded for ${monthName} ${year} for ${memberName}.`,
+      });
+    }
+    const ref = db.collection('savings').doc();
+    await ref.set({
+      id: ref.id,
+      ...req.body,
+      memberId: member_id,
+      groupId: groupIdOf(req),
+      amount: number(amount),
+      createdAt: new Date().toISOString(),
+    });
+    res.status(201).json({ success: true, savingsId: ref.id });
+  } catch (err) {
+    next(err);
+  }
+}
 async function updateSavings(req, res, next) { try { await db.collection('savings').doc(req.params.id).set({ ...req.body, updatedAt: new Date().toISOString() }, { merge: true }); res.json({ success: true, message: 'Savings record updated successfully.' }); } catch (err) { next(err); } }
 
 async function getAllLoans(req, res) { let loans = await getCollection('loans', groupIdOf(req)); const repayments = await getCollection('repayments', groupIdOf(req)); loans = loans.map((l) => ({ ...l, loan_id: l.id, loan_number: value(l, 'loanNumber', 'loan_number'), principal_amount: number(value(l, 'principalAmount', 'principal_amount')), outstanding_amount: number(value(l, 'remainingAmount', 'outstanding_amount')), interest_rate: number(value(l, 'interestRate', 'interest_rate')), total_principal_repaid: repayments.filter((r) => r.loanId === l.id).reduce((s, r) => s + number(value(r, 'principalAmount', 'principal_repayment_amount')), 0) })); if (req.query.status) loans = loans.filter((l) => l.status === req.query.status.toUpperCase()); res.json({ success: true, count: loans.length, loans }); }
 async function getLoanById(req, res) { const loan = (await getCollection('loans', groupIdOf(req))).find((l) => l.id === req.params.id); if (!loan) return res.status(404).json({ success: false, message: 'Loan not found.' }); res.json({ success: true, loan }); }
-async function createLoan(req, res, next) { try { const ref = db.collection('loans').doc(); const principal = number(req.body.principal_amount); await ref.set({ id: ref.id, ...req.body, loanNumber: `LN-${new Date().getFullYear()}-${ref.id.slice(-3)}`, principalAmount: principal, remainingAmount: principal, groupId: groupIdOf(req), status: 'ACTIVE', createdAt: new Date().toISOString() }); res.status(201).json({ success: true, loanId: ref.id }); } catch (err) { next(err); } }
+async function createLoan(req, res, next) {
+  try {
+    const rawPrincipal = req.body.principal_amount !== undefined ? req.body.principal_amount : (req.body.principalAmount !== undefined ? req.body.principalAmount : req.body.originalPrincipal);
+    const principal = typeof rawPrincipal === 'number' ? rawPrincipal : parseFloat(String(rawPrincipal || '').replace(/,/g, ''));
+    if (!Number.isFinite(principal) || isNaN(principal) || principal <= 0 || principal > Number.MAX_SAFE_INTEGER) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid positive loan amount.' });
+    }
+
+    const groupId = groupIdOf(req);
+    const [savings, loans, repayments] = await Promise.all(['savings', 'loans', 'repayments'].map((name) => getCollection(name, groupId)));
+    const totalSavings = savings.reduce((s, x) => s + number(x.amount), 0);
+    const interest = repayments.reduce((s, x) => s + number(value(x, 'interestAmount', 'interest_amount')), 0);
+    const active = loans.filter((l) => (l.status || '').toUpperCase() === 'ACTIVE');
+    const activeLoans = active.reduce((s, x) => s + number(value(x, 'remainingAmount', 'outstanding_amount')), 0);
+    const availableBalance = Math.max(0, totalSavings + interest - activeLoans);
+
+    if (availableBalance <= 0) {
+      return res.status(400).json({ success: false, message: 'Insufficient available balance. No amount is currently available for a new loan.' });
+    }
+    if (principal > availableBalance) {
+      const formattedMax = `₹${Math.round(availableBalance).toLocaleString('en-IN')}`;
+      return res.status(400).json({ success: false, message: `Insufficient available balance. You can issue a maximum loan of ${formattedMax}.` });
+    }
+
+    const ref = db.collection('loans').doc();
+    await ref.set({ id: ref.id, ...req.body, loanNumber: `LN-${new Date().getFullYear()}-${ref.id.slice(-3)}`, principalAmount: principal, remainingAmount: principal, groupId, status: 'ACTIVE', createdAt: new Date().toISOString() });
+    res.status(201).json({ success: true, loanId: ref.id });
+  } catch (err) {
+    next(err);
+  }
+}
 async function recordLoanRepayment(req, res, next) { try { const ref = db.collection('repayments').doc(); await ref.set({ id: ref.id, ...req.body, loanId: req.params.loanId, groupId: groupIdOf(req), createdAt: new Date().toISOString() }); res.status(201).json({ success: true, repaymentId: ref.id }); } catch (err) { next(err); } }
 async function getLoanRepayments(req, res) { const repayments = (await getCollection('repayments', groupIdOf(req))).filter((r) => r.loanId === req.params.loanId); res.json({ success: true, repayments }); }
 

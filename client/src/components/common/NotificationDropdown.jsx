@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, Info, CheckCircle2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 import { notificationService } from '../../services/dashboardService';
 import { formatDate } from '../../utils/formatters';
 
 const NotificationDropdown = () => {
+  const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -154,7 +156,7 @@ const NotificationDropdown = () => {
             }}
           >
             <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-              Notifications ({unreadCount} new)
+              {t('header.notifications')} ({unreadCount})
             </div>
             {unreadCount > 0 && (
               <button
@@ -169,7 +171,7 @@ const NotificationDropdown = () => {
                   gap: '4px',
                 }}
               >
-                <Check size={12} /> Mark all read
+                <Check size={12} /> {t('header.markAllRead')}
               </button>
             )}
           </div>
@@ -177,7 +179,7 @@ const NotificationDropdown = () => {
           <div style={{ maxHeight: '350px', overflowY: 'auto' }}>
             {notifications.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                No notifications right now
+                {t('header.noNotifications')}
               </div>
             ) : (
               notifications.map((n) => (

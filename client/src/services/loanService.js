@@ -10,25 +10,115 @@ import {
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db } from '../config/firebase.js';
 import {
   normalizeLoan,
   normalizeMember,
   normalizeSavings,
   DEFAULT_GROUP_ID,
-} from '../utils/formatters';
+} from '../utils/formatters.js';
+
+export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_ID) {
+  const targetGroupId = groupId || DEFAULT_GROUP_ID;
+  const [contributionsSnap, loansSnap, repaymentsSnap, settlementsSnap] = await Promise.all([
+    getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
+    getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+    getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
+    getDocs(collection(db, 'groups', targetGroupId, 'settlements')).catch(() => ({ docs: [] })),
+  ]);
+
+  const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+  const totalSavings = allSavings
+    .filter((c) => c.isPaid || c.paidAmount > 0)
+    .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
+
+  const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const repaymentsByLoan = {};
+  repaymentsList.forEach((r) => {
+    const lId = r.loanId || r.loan_id;
+    if (lId) {
+      if (!repaymentsByLoan[lId]) repaymentsByLoan[lId] = [];
+      repaymentsByLoan[lId].push(r);
+    }
+  });
+
+  const loansList = loansSnap.docs.map((d) => {
+    const loanId = d.id;
+    const raw = d.data();
+    const loanRepays = repaymentsByLoan[loanId] || repaymentsByLoan[raw.loanId] || [];
+    return normalizeLoan(loanId, raw, loanRepays);
+  });
+
+  const activeLoansDocs = loansList.filter((l) => {
+    const s = (l.status || '').toUpperCase();
+    const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+    return s === 'ACTIVE' && pending > 0;
+  });
+
+  const activeLoansTotal = activeLoansDocs.reduce((acc, l) => {
+    const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+    return acc + pending;
+  }, 0);
+
+  let allLoansInterest = loansList.reduce((sum, l) => sum + (l.totalInterestPaid || 0), 0);
+  const matchedLoanIds = new Set(loansList.map((l) => l.id).concat(loansList.map((l) => l.loanId)));
+  const orphanRepaymentsInterest = repaymentsList
+    .filter((r) => {
+      const lId = r.loanId || r.loan_id;
+      return !lId || !matchedLoanIds.has(lId);
+    })
+    .reduce((s, r) => s + Number(r.interestAmount || r.interestPaid || r.interest_amount || 0), 0);
+  allLoansInterest += orphanRepaymentsInterest;
+
+  const allContributionsInterest = allSavings.reduce((sum, c) => sum + (c.interestAmount || c.interest || 0), 0);
+  const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
+
+  const totalInterest = Math.max(0, Math.round((allContributionsInterest + allLoansInterest - totalSettledInterest) * 100) / 100);
+  const totalGroupFund = totalSavings + totalInterest;
+  const availableBalance = Math.max(0, totalGroupFund - activeLoansTotal);
+
+  return {
+    totalSavings,
+    totalInterest,
+    totalGroupFund,
+    activeLoansTotal,
+    availableBalance,
+  };
+}
 
 export const loanService = {
+  /**
+   * Get current available group balance for loan issuance
+   */
+  getAvailableBalance: async (groupId = DEFAULT_GROUP_ID) => {
+    try {
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
+      const balanceData = await calculateCurrentAvailableBalance(targetGroupId);
+      return { success: true, ...balanceData };
+    } catch (err) {
+      console.error('Failed to get available balance:', err);
+      return {
+        success: true,
+        totalSavings: 0,
+        totalInterest: 0,
+        totalGroupFund: 0,
+        activeLoansTotal: 0,
+        availableBalance: 0,
+      };
+    }
+  },
   /**
    * Get all loans with member info and progress metrics from Flutter subcollections
    */
   getAllLoans: async (params = {}, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
 
-      const [loansSnap, membersSnap] = await Promise.all([
+      const [loansSnap, repaymentsSnap, membersSnap, activitiesSnap] = await Promise.all([
         getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
         getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'activities')).catch(() => ({ docs: [] })),
       ]);
 
       const membersMap = {};
@@ -41,9 +131,32 @@ export const loanService = {
         if (d.authUid) membersMap[d.authUid] = { name: memberName, code: memberCode };
       });
 
+      // Historical name fallback from activities/transactions for deleted members
+      activitiesSnap.docs.forEach((docSnap) => {
+        const d = docSnap.data();
+        const mName = d.memberName || d.member_name;
+        if (mName && mName.trim() && !mName.startsWith('Member ')) {
+          const cleanName = mName.trim();
+          if (d.memberId && (!membersMap[d.memberId] || membersMap[d.memberId].name === 'Member')) {
+            membersMap[d.memberId] = { name: cleanName, code: d.memberCode || d.member_code || d.memberId };
+          }
+        }
+      });
+
+      const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const repaymentsByLoan = {};
+      repaymentsList.forEach((r) => {
+        const lId = r.loanId || r.loan_id;
+        if (lId) {
+          if (!repaymentsByLoan[lId]) repaymentsByLoan[lId] = [];
+          repaymentsByLoan[lId].push(r);
+        }
+      });
+
       const allLoans = loansSnap.docs.map((docSnap) => {
         const raw = docSnap.data();
-        const normalized = normalizeLoan(docSnap.id, raw);
+        const loanRepays = repaymentsByLoan[docSnap.id] || repaymentsByLoan[raw.loanId] || [];
+        const normalized = normalizeLoan(docSnap.id, raw, loanRepays);
         const memInfo = membersMap[normalized.memberId] || { name: normalized.memberName, code: normalized.memberCode };
 
         return {
@@ -61,6 +174,8 @@ export const loanService = {
         .filter((l) => l.status === 'ACTIVE')
         .reduce((sum, l) => sum + (l.pendingPrincipal || 0), 0);
       const totalDisbursed = allLoans.reduce((sum, l) => sum + (l.originalPrincipal || 0), 0);
+      const totalPrincipalRecovered = allLoans.reduce((sum, l) => sum + (l.totalPrincipalPaid || 0), 0);
+      const totalInterestEarned = allLoans.reduce((sum, l) => sum + (l.totalInterestPaid || 0), 0);
 
       let filtered = allLoans;
       if (params.memberId) {
@@ -91,6 +206,10 @@ export const loanService = {
         closedLoansCount: totalClosedLoansCount,
         totalOutstanding,
         totalDisbursed,
+        totalPrincipalRecovered,
+        totalPrincipalCollected: totalPrincipalRecovered,
+        totalInterestEarned,
+        totalInterestCollected: totalInterestEarned,
         loans: filtered,
         allLoans,
       };
@@ -103,7 +222,11 @@ export const loanService = {
         activeLoansCount: 0,
         closedLoansCount: 0,
         totalOutstanding: 0,
-        totalDisbursed: 0,
+        totalDisbursed,
+        totalPrincipalRecovered: 0,
+        totalPrincipalCollected: 0,
+        totalInterestEarned: 0,
+        totalInterestCollected: 0,
         loans: [],
         allLoans: [],
       };
@@ -136,7 +259,7 @@ export const loanService = {
    */
   getLoanById: async (loanId, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const loanDocRef = doc(db, 'groups', targetGroupId, 'loans', loanId);
       const loanSnap = await getDoc(loanDocRef);
 
@@ -145,49 +268,90 @@ export const loanService = {
       }
 
       const raw = loanSnap.data();
-      const normalized = normalizeLoan(loanSnap.id, raw);
+      const actualLoanId = loanSnap.id;
 
-      // Fetch member info
-      let memberName = normalized.memberName;
-      let memberCode = normalized.memberCode;
-      try {
-        const memSnap = await getDoc(doc(db, 'groups', targetGroupId, 'members', normalized.memberId));
-        if (memSnap.exists()) {
-          const mData = memSnap.data();
-          memberName = mData.name || mData.fullName || memberName;
-          memberCode = mData.memberCode || mData.member_code || normalized.memberId;
-        }
-      } catch (e) {
-        // fallback
+      // Fetch member info, repayments subcollection, activities, and monthly_contributions (fallback)
+      const [repaymentsSnap, contributionsSnap, membersSnap, activitiesSnap] = await Promise.all([
+        getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'activities')).catch(() => ({ docs: [] })),
+      ]);
+
+      const memberDoc = membersSnap.docs.find((d) => d.id === raw.memberId);
+      let memberName = memberDoc?.data()?.name || memberDoc?.data()?.fullName || raw.memberName || raw.member_name;
+      let memberCode = memberDoc?.data()?.memberCode || memberDoc?.data()?.member_code || raw.memberCode || raw.memberId;
+
+      if (!memberName || memberName === 'Member' || memberName.startsWith('Member ')) {
+        activitiesSnap.docs.forEach((d) => {
+          const data = d.data();
+          if ((data.referenceId === actualLoanId || data.memberId === raw.memberId) && data.memberName && !data.memberName.startsWith('Member ')) {
+            memberName = data.memberName.trim();
+          }
+        });
       }
+      if (!memberName) memberName = 'Member';
 
-      // Fetch repayments/contributions
-      const contributionsSnap = await getDocs(
-        collection(db, 'groups', targetGroupId, 'monthly_contributions')
-      ).catch(() => ({ docs: [] }));
+      // 1. Primary Repayments from 'repayments' collection
+      const rawRepayments = repaymentsSnap.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .filter(
+          (r) =>
+            r.loanId === actualLoanId ||
+            r.loan_id === actualLoanId ||
+            r.loanId === raw.loanId ||
+            r.loan_id === raw.loanId ||
+            (r.memberId === raw.memberId && (r.principalAmount > 0 || r.interestAmount > 0))
+        );
 
-      const repaymentsList = contributionsSnap.docs
+      // 2. Fallback Repayments from 'monthly_contributions' (if any legacy combined transactions)
+      const legacyRepayments = contributionsSnap.docs
         .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((s) => s.memberId === normalized.memberId && (s.loanPrincipalPaid > 0 || s.interestAmount > 0))
-        .map((r) => ({
-          ...r,
-          id: r.id,
-          repayment_id: r.id,
-          loan_id: loanId,
-          loan_number: normalized.loanNumber,
-          principal_repayment_amount: r.loanPrincipalPaid,
-          principalAmount: r.loanPrincipalPaid,
-          interest_amount: r.interestAmount,
-          interestAmount: r.interestAmount,
-          total_payment: r.loanPrincipalPaid + r.interestAmount,
-          payment_date: r.paymentDate,
-          payment_mode: r.paymentMode,
-          payment_month: r.month,
-          payment_year: r.year,
+        .filter(
+          (s) =>
+            (s.memberId === raw.memberId || s.member_id === raw.memberId) &&
+            (s.loanPrincipalPaid > 0 || s.interestAmount > 0) &&
+            !rawRepayments.some((r) => r.id === s.id)
+        )
+        .map((s) => ({
+          id: s.id,
+          repaymentId: s.id,
+          loanId: actualLoanId,
+          principalAmount: s.loanPrincipalPaid,
+          interestAmount: s.interestAmount,
+          amount: s.loanPrincipalPaid + s.interestAmount,
+          paymentDate: s.paymentDate,
+          paymentMode: s.paymentMode,
+          paymentMonth: s.month,
+          paymentYear: s.year,
         }));
 
-      const totalPrincipalRepaid = normalized.totalPrincipalPaid;
-      const totalInterestPaid = repaymentsList.reduce((acc, r) => acc + (r.interestAmount || 0), 0);
+      const allLoanRepayments = [...rawRepayments, ...legacyRepayments];
+      const normalized = normalizeLoan(actualLoanId, raw, allLoanRepayments);
+
+      const mappedRepayments = allLoanRepayments
+        .map((r) => {
+          const pPaid = Number(r.principalAmount || r.principalPaid || r.principalRepaid || r.principal_repayment_amount || 0);
+          const iPaid = Number(r.interestAmount || r.interestPaid || r.interest_amount || 0);
+          return {
+            id: r.id,
+            repayment_id: r.id,
+            loan_id: actualLoanId,
+            loan_number: normalized.loanNumber,
+            principal_repayment_amount: pPaid,
+            principalAmount: pPaid,
+            interest_amount: iPaid,
+            interestAmount: iPaid,
+            total_payment: Number(r.totalPayment || r.totalPaid || r.amount || (pPaid + iPaid)),
+            payment_date: r.paymentDate || r.paidAt || r.payment_date || r.createdAt || new Date().toISOString(),
+            paymentDate: r.paymentDate || r.paidAt || r.payment_date || r.createdAt || new Date().toISOString(),
+            payment_mode: r.paymentMode || r.payment_mode || 'UPI',
+            paymentMode: r.paymentMode || r.payment_mode || 'UPI',
+            payment_month: r.month || r.paymentMonth || r.payment_month || 0,
+            payment_year: r.year || r.paymentYear || r.payment_year || 0,
+          };
+        })
+        .sort((a, b) => new Date(b.payment_date) - new Date(a.payment_date));
 
       return {
         success: true,
@@ -197,10 +361,11 @@ export const loanService = {
           memberName: memberName,
           member_code: memberCode,
           memberCode: memberCode,
-          total_principal_repaid: totalPrincipalRepaid,
-          total_interest_paid: totalInterestPaid,
-          totalInterestPaid: totalInterestPaid,
-          repayments: repaymentsList,
+          total_principal_repaid: normalized.totalPrincipalPaid,
+          totalPrincipalRepaid: normalized.totalPrincipalPaid,
+          total_interest_paid: normalized.totalInterestPaid,
+          totalInterestPaid: normalized.totalInterestPaid,
+          repayments: mappedRepayments,
         },
       };
     } catch (err) {
@@ -214,17 +379,44 @@ export const loanService = {
    */
   createLoan: async (loanData, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const memberId = loanData.member_id || loanData.memberId;
-      const principal = parseFloat(loanData.principal_amount || loanData.principalAmount || loanData.originalPrincipal);
+      const rawPrincipal = loanData.principal_amount !== undefined ? loanData.principal_amount : (loanData.principalAmount !== undefined ? loanData.principalAmount : loanData.originalPrincipal);
+      const principal = typeof rawPrincipal === 'number' ? rawPrincipal : parseFloat(String(rawPrincipal || '').replace(/,/g, ''));
       const interestRate = parseFloat(loanData.interest_rate || loanData.interestRate) || 2.0;
       const purpose = (loanData.purpose || 'General').trim();
       const dateStr = loanData.loan_date || loanData.loanDate || new Date().toISOString();
       const durationMonths = parseInt(loanData.duration_months || loanData.durationMonths, 10) || 12;
 
-      if (!memberId || !Number.isFinite(principal) || principal <= 0) {
-        throw new Error('A valid member and principal amount are required.');
+      // 1. Strict numeric validations: prevent 0, negative, empty, NaN, Infinity, overflow
+      if (
+        rawPrincipal === undefined ||
+        rawPrincipal === null ||
+        String(rawPrincipal).trim() === '' ||
+        !Number.isFinite(principal) ||
+        isNaN(principal) ||
+        principal <= 0 ||
+        principal > Number.MAX_SAFE_INTEGER
+      ) {
+        throw new Error('Please enter a valid positive loan amount.');
       }
+
+      if (!memberId) {
+        throw new Error('Please select a valid borrowing member.');
+      }
+
+      // 2. Real-time authoritative calculation of current available balance from live Firestore database
+      const { availableBalance } = await calculateCurrentAvailableBalance(targetGroupId);
+
+      if (availableBalance <= 0) {
+        throw new Error('Insufficient available balance. No amount is currently available for a new loan.');
+      }
+
+      if (principal > availableBalance) {
+        const formattedMax = `₹${Math.round(availableBalance).toLocaleString('en-IN')}`;
+        throw new Error(`Insufficient available balance. You can issue a maximum loan of ${formattedMax}.`);
+      }
+
       const selectedMemberSnap = await getDoc(doc(db, 'groups', targetGroupId, 'members', memberId));
       if (!selectedMemberSnap.exists() || selectedMemberSnap.data().isActive === false || (selectedMemberSnap.data().status || 'active').toLowerCase() === 'inactive') {
         throw new Error('The selected member is not active or no longer exists.');
@@ -309,7 +501,7 @@ export const loanService = {
    */
   recordRepayment: async (repayData, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const loanId = repayData.loan_id || repayData.loanId;
       const principalRepay = parseFloat(repayData.principal_repayment_amount || repayData.principalAmount || 0);
       const regularHafta = parseFloat(repayData.regular_hafta_amount || 0);
@@ -327,7 +519,14 @@ export const loanService = {
       }
 
       const loanData = loanSnap.data();
-      const currentPending = Number(loanData.pendingPrincipal || loanData.remainingAmount || 0);
+      const currentPending = Number(
+        loanData.pendingPrincipal !== undefined && loanData.pendingPrincipal !== null ? loanData.pendingPrincipal :
+        loanData.remainingAmount !== undefined && loanData.remainingAmount !== null ? loanData.remainingAmount :
+        loanData.remainingPrincipal !== undefined && loanData.remainingPrincipal !== null ? loanData.remainingPrincipal :
+        loanData.balanceAmount !== undefined && loanData.balanceAmount !== null ? loanData.balanceAmount :
+        (Number(loanData.principalAmount || loanData.originalPrincipal || loanData.amount || 0) - Number(loanData.totalPrincipalPaid || loanData.total_principal_paid || 0)) || 0
+      );
+
       if ((loanData.status || 'active').toLowerCase() !== 'active') throw new Error('This loan is already closed.');
       if (principalRepay < 0 || principalRepay > currentPending) throw new Error('Principal repayment is outside the valid outstanding balance.');
       const interestRate = Number(loanData.interestRate || 2.0);
@@ -338,14 +537,20 @@ export const loanService = {
       const currentPrincipalPaid = Number(loanData.totalPrincipalPaid || loanData.total_principal_paid || 0);
       const currentInterestPaid = Number(loanData.totalInterestPaid || loanData.total_interest_paid || 0);
 
+      const newPending = Math.max(0, Math.round((currentPending - principalRepay) * 100) / 100);
+      const newStatus = newPending <= 0 ? 'CLOSED' : 'ACTIVE';
+
       // 1. Update Loan Document (Outstanding balance, principal paid, interest paid, status)
       await updateDoc(loanDocRef, {
         pendingPrincipal: newPending,
+        remainingAmount: newPending,
+        remainingPrincipal: newPending,
         totalPrincipalPaid: currentPrincipalPaid + principalRepay,
         total_principal_paid: currentPrincipalPaid + principalRepay,
         totalInterestPaid: currentInterestPaid + calculatedInterest,
         total_interest_paid: currentInterestPaid + calculatedInterest,
         status: newStatus.toUpperCase(),
+        status_lower: newStatus.toLowerCase(),
         updatedAt: new Date().toISOString(),
       });
 
@@ -365,21 +570,37 @@ export const loanService = {
         transactionType: 'LOAN_REPAYMENT',
         principalAmount: principalRepay,
         principal_amount: principalRepay,
+        principalPaid: principalRepay,
+        principal_paid: principalRepay,
+        principalRepaid: principalRepay,
         interestAmount: calculatedInterest,
         interest_amount: calculatedInterest,
+        interestPaid: calculatedInterest,
+        interest_paid: calculatedInterest,
+        regularHafta: regularHafta,
         regularHaftaAmount: regularHafta,
         regular_hafta_amount: regularHafta,
+        regularContribution: regularHafta,
         amount: totalPayment,
+        totalPaid: totalPayment,
+        totalPayment: totalPayment,
+        openingPrincipal: currentPending,
+        closingPrincipal: newPending,
+        pendingPrincipalAfterPayment: newPending,
+        month,
         paymentMonth: month,
         payment_month: month,
+        year,
         paymentYear: year,
         payment_year: year,
         paymentDate,
         payment_date: paymentDate,
         paymentMode: mode,
         payment_mode: mode,
+        interestRate,
         remarks,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
 
       // 3. ONLY if regularHafta was explicitly entered (> 0), record separate savings contribution
@@ -485,7 +706,7 @@ export const loanService = {
    * Subscribe to real-time loans
    */
   subscribeToLoans: (callback, groupId = DEFAULT_GROUP_ID) => {
-    const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+    const targetGroupId = groupId || DEFAULT_GROUP_ID;
     return onSnapshot(collection(db, 'groups', targetGroupId, 'loans'), () => {
       loanService.getAllLoans({}, targetGroupId).then((res) => {
         if (res.success) callback(res);

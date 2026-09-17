@@ -21,6 +21,7 @@ import {
   normalizeLoan,
   normalizeActivity,
   DEFAULT_GROUP_ID,
+  isRegularMember,
   calculateMonthlyMemberStatus,
   calculateMonthlyMemberStatuses,
 } from '../utils/formatters';
@@ -80,16 +81,19 @@ export const dashboardService = {
    */
   getSummary: async (groupId = DEFAULT_GROUP_ID, memberId = null) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
 
-      const [groupRes, contributionsSnap, loansSnap, membersSnap] = await Promise.all([
-        groupService.getGroupDetails(targetGroupId),
+      const [groupDocSnap, contributionsSnap, loansSnap, repaymentsSnap, membersSnap, settlementsSnap] = await Promise.all([
+        getDoc(doc(db, 'groups', targetGroupId)).catch(() => null),
         getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
         getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
         getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'settlements')).catch(() => ({ docs: [] })),
       ]);
 
-      const group = groupRes.group || {};
+      const groupRaw = groupDocSnap?.exists() ? groupDocSnap.data() : {};
+      const group = normalizeGroup(targetGroupId, groupRaw);
       const groupName = group.name || group.groupName || 'Chhatrapati Bachat Gat, Ghargaon Stand';
       const groupCode = group.groupCode || targetGroupId;
 
@@ -102,8 +106,25 @@ export const dashboardService = {
       const memberContributions = liveSavingsTotal;
       const totalSavings = memberContributions;
 
-      // 2. Loans & Repayments calculated dynamically
-      const loansList = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
+      // 2. Map Repayments by Loan ID
+      const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const repaymentsByLoan = {};
+      repaymentsList.forEach((r) => {
+        const lId = r.loanId || r.loan_id;
+        if (lId) {
+          if (!repaymentsByLoan[lId]) repaymentsByLoan[lId] = [];
+          repaymentsByLoan[lId].push(r);
+        }
+      });
+
+      // 3. Loans & Repayments calculated dynamically
+      const loansList = loansSnap.docs.map((d) => {
+        const loanId = d.id;
+        const raw = d.data();
+        const loanRepays = repaymentsByLoan[loanId] || repaymentsByLoan[raw.loanId] || [];
+        return normalizeLoan(loanId, raw, loanRepays);
+      });
+
       const activeLoansDocs = loansList.filter((l) => {
         const s = (l.status || '').toUpperCase();
         const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
@@ -118,23 +139,39 @@ export const dashboardService = {
       const activeLoansCount = activeLoansDocs.length;
       const totalPrincipalRepaid = loansList.reduce((acc, l) => acc + (l.totalPrincipalPaid || l.total_principal_paid || 0), 0);
 
-      // 3. Total Interest Earned
+      // 4. Total Interest Earned (from contributions + loan repayments minus settled member interest)
       const interestFromContributions = contributionsList.reduce((sum, c) => sum + (c.interestAmount || c.interest || 0), 0);
-      const interestFromLoans = loansList.reduce((sum, l) => sum + (l.totalInterestPaid || l.total_interest_paid || 0), 0);
-      const calculatedInterest = Math.round((interestFromContributions + interestFromLoans) * 100) / 100;
+      let interestFromLoans = loansList.reduce((sum, l) => sum + (l.totalInterestPaid || l.total_interest_paid || 0), 0);
+
+      // Include standalone repayments not directly matched to a loan document
+      const matchedLoanIds = new Set(loansList.map((l) => l.id).concat(loansList.map((l) => l.loanId)));
+      const orphanRepaymentsInterest = repaymentsList
+        .filter((r) => {
+          const lId = r.loanId || r.loan_id;
+          return !lId || !matchedLoanIds.has(lId);
+        })
+        .reduce((s, r) => s + Number(r.interestAmount || r.interestPaid || r.interest_amount || 0), 0);
+
+      interestFromLoans += orphanRepaymentsInterest;
+
+      const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
+      const calculatedInterest = Math.max(0, Math.round((interestFromContributions + interestFromLoans - totalSettledInterest) * 100) / 100);
       const totalInterest = calculatedInterest;
 
-      // 4. Exact Mathematical Invariants:
+      // 5. Exact Mathematical Invariants:
       // totalGroupFund = memberContributions + totalInterest
       const totalGroupFund = totalSavings + totalInterest;
 
       // availableBalance = totalGroupFund - activeLoans
       const availableBalance = Math.max(0, totalGroupFund - activeLoans);
 
-      // 5. Member metrics
-      const totalMembers = membersSnap.size || group.totalMembers || group.total_members || 368;
-      const activeMembers = membersSnap.docs && membersSnap.docs.length > 0
-        ? membersSnap.docs.filter((d) => (d.data().status || 'active').toLowerCase() === 'active').length
+      // 5. Member metrics (strictly regular group members)
+      const regularMemberDocs = (membersSnap && membersSnap.docs)
+        ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
+        : [];
+      const totalMembers = regularMemberDocs.length || group.totalMembers || group.total_members || 0;
+      const activeMembers = regularMemberDocs.length > 0
+        ? regularMemberDocs.filter((d) => (d.data().status || 'active').toLowerCase() === 'active').length
         : totalMembers;
 
       // 6. Member Personal Summary (if memberId provided)
@@ -178,6 +215,8 @@ export const dashboardService = {
           availableBalance,
           totalMembers,
           activeMembers,
+          monthlyHaftaDay: group.monthlyHaftaDay || 10,
+          monthly_hafta_day: group.monthly_hafta_day || 10,
         },
         memberSummary,
       };
@@ -217,7 +256,7 @@ export const dashboardService = {
     groupId = DEFAULT_GROUP_ID
   ) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const m = parseInt(month, 10) || (new Date().getMonth() + 1);
       const y = parseInt(year, 10) || new Date().getFullYear();
 
@@ -228,8 +267,20 @@ export const dashboardService = {
         getDoc(doc(db, 'groups', targetGroupId)).catch(() => null),
       ]);
 
-      const monthlyShare = Number(groupDocSnap?.data()?.monthlyContribution ?? groupDocSnap?.data()?.monthly_contribution ?? 1000);
-      const allMembers = membersSnap.docs.map((d) => normalizeMember(d.id, d.data()));
+      const monthlyShare = Number(
+        groupDocSnap?.data()?.monthly_contribution_per_share ??
+        groupDocSnap?.data()?.monthlyContributionPerShare ??
+        groupDocSnap?.data()?.monthlyContribution ??
+        groupDocSnap?.data()?.monthly_contribution ??
+        groupDocSnap?.data()?.monthlyContributionAmount ??
+        groupDocSnap?.data()?.monthlyShare ??
+        groupDocSnap?.data()?.monthly_share ??
+        1000
+      );
+      const regularMemberDocs = (membersSnap && membersSnap.docs)
+        ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
+        : [];
+      const allMembers = regularMemberDocs.map((d) => normalizeMember(d.id, d.data()));
       const activeMembers = allMembers.filter((mem) => {
         const s = (mem.status || 'ACTIVE').toUpperCase();
         return mem.isActive !== false && s === 'ACTIVE';
@@ -246,6 +297,9 @@ export const dashboardService = {
         monthlyShare,
       });
 
+      const groupRaw = groupDocSnap?.exists() ? groupDocSnap.data() : {};
+      const monthlyHaftaDay = parseInt(groupRaw.monthly_hafta_day ?? groupRaw.monthlyHaftaDay ?? 10, 10) || 10;
+
       return {
         success: true,
         progress: {
@@ -259,6 +313,8 @@ export const dashboardService = {
           pendingMembers: summary.pendingMembers,
           pendingMembersCount: summary.pendingCount,
           monthlyShare,
+          monthlyHaftaDay,
+          monthly_hafta_day: monthlyHaftaDay,
           monthlyTarget: summary.monthlyTarget,
           targetAmount: summary.monthlyTarget,
           collectedAmount: summary.collectedAmount,
@@ -304,14 +360,142 @@ export const dashboardService = {
    */
   getRecentActivities: async (limitCount = 8, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
-      const activitiesSnap = await getDocs(
-        collection(db, 'groups', targetGroupId, 'activities')
-      ).catch(() => ({ docs: [] }));
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
+      const [activitiesSnap, membersSnap, contribSnap] = await Promise.all([
+        getDocs(collection(db, 'groups', targetGroupId, 'activities')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
+      ]);
 
-      const activities = activitiesSnap.docs
-        .map((d) => normalizeActivity(d.id, d.data()))
+      const membersMap = {};
+      membersSnap.docs.forEach((d) => {
+        const data = d.data();
+        const mName = data.name || data.fullName || data.full_name || '';
+        membersMap[d.id] = mName;
+        if (data.memberId) membersMap[data.memberId] = mName;
+        if (data.userId) membersMap[data.userId] = mName;
+        if (data.authUid) membersMap[data.authUid] = mName;
+      });
+
+      const contribMap = {};
+      contribSnap.docs.forEach((d) => {
+        const c = d.data();
+        contribMap[d.id] = c;
+        if (c.id) contribMap[c.id] = c;
+        if (c.contribId) contribMap[c.contribId] = c;
+      });
+
+      let activities = activitiesSnap.docs
+        .map((d) => {
+          const raw = d.data();
+          const norm = normalizeActivity(d.id, raw);
+          const resolvedMemberName = norm.memberName || raw.memberName || raw.member_name || membersMap[norm.memberId] || membersMap[raw.member_id] || membersMap[raw.userId] || membersMap[raw.authUid] || '';
+          
+          let month = norm.month || raw.month || raw.contributionMonth;
+          let year = norm.year || raw.year || raw.contributionYear;
+          if ((!month || !year) && norm.referenceId && contribMap[norm.referenceId]) {
+            month = contribMap[norm.referenceId].month;
+            year = contribMap[norm.referenceId].year;
+          }
+          if ((!month || !year) && (norm.type === 'SAVING' || norm.type === 'SAVINGS' || norm.type === 'MONTHLYINVESTMENT' || (norm.description && (norm.description.toLowerCase().includes('saving') || norm.description.includes('मासिक बचत'))))) {
+            const memId = norm.memberId || raw.memberId || raw.member_id;
+            if (memId) {
+              const matchingContribs = contribSnap.docs
+                .map(cd => cd.data())
+                .filter(c => (c.memberId === memId || c.member_id === memId));
+              if (matchingContribs.length === 1) {
+                month = matchingContribs[0].month;
+                year = matchingContribs[0].year;
+              } else if (matchingContribs.length > 1) {
+                const byAmt = matchingContribs.find(c => Number(c.paidAmount || c.amount || c.regularHaftaAmount) === Number(norm.amount));
+                if (byAmt) {
+                  month = byAmt.month;
+                  year = byAmt.year;
+                } else {
+                  month = matchingContribs[0].month;
+                  year = matchingContribs[0].year;
+                }
+              }
+            }
+          }
+
+          return {
+            ...norm,
+            memberName: resolvedMemberName,
+            month: month ? Number(month) : undefined,
+            year: year ? Number(year) : undefined,
+          };
+        })
         .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      // If activities collection is empty, fallback to recent contributions, loans, and repayments
+      if (activities.length === 0) {
+        const [loansSnap, repaySnap] = await Promise.all([
+          getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+          getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
+        ]);
+
+        const fallbackItems = [];
+
+        contribSnap.docs.forEach((d) => {
+          const c = d.data();
+          if (c.paidAmount > 0 || c.amount > 0 || c.status === 'PAID') {
+            const mId = c.memberId || c.member_id || '';
+            const mName = c.memberName || c.member_name || membersMap[mId] || '';
+            const amt = Number(c.paidAmount || c.amount || 0);
+            fallbackItems.push({
+              id: d.id,
+              type: 'SAVING',
+              amount: amt,
+              description: `Monthly savings ₹${amt} received from ${mName}`,
+              date: c.paymentDate || c.payment_date || c.createdAt || new Date().toISOString(),
+              created_at: c.paymentDate || c.payment_date || c.createdAt || new Date().toISOString(),
+              memberId: mId,
+              memberName: mName,
+              referenceId: d.id,
+              month: Number(c.month),
+              year: Number(c.year),
+            });
+          }
+        });
+
+        loansSnap.docs.forEach((d) => {
+          const l = d.data();
+          const mId = l.memberId || l.member_id || '';
+          const mName = l.memberName || l.member_name || membersMap[mId] || '';
+          const amt = Number(l.originalPrincipal || l.principalAmount || 0);
+          fallbackItems.push({
+            id: d.id,
+            type: 'LOAN',
+            amount: amt,
+            description: `Loan of ₹${amt} approved for ${mName}`,
+            date: l.issueDate || l.loanDate || l.loan_date || l.createdAt || new Date().toISOString(),
+            created_at: l.issueDate || l.loanDate || l.loan_date || l.createdAt || new Date().toISOString(),
+            memberId: mId,
+            memberName: mName,
+          });
+        });
+
+        repaySnap.docs.forEach((d) => {
+          const r = d.data();
+          const mId = r.memberId || r.member_id || '';
+          const mName = r.memberName || r.member_name || membersMap[mId] || '';
+          const amt = Number(r.amount || r.totalPayment || r.totalPaid || 0);
+          fallbackItems.push({
+            id: d.id,
+            type: 'REPAYMENT',
+            amount: amt,
+            description: `Loan repayment ₹${amt} received from ${mName}`,
+            date: r.paymentDate || r.payment_date || r.paidAt || r.createdAt || new Date().toISOString(),
+            created_at: r.paymentDate || r.payment_date || r.paidAt || r.createdAt || new Date().toISOString(),
+            memberId: mId,
+            memberName: mName,
+          });
+        });
+
+        fallbackItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+        activities = fallbackItems;
+      }
 
       return {
         success: true,
@@ -327,7 +511,7 @@ export const dashboardService = {
    * Subscribe to Real-Time Dashboard Updates across all collections
    */
   subscribeToDashboard: (groupId, memberId, callback) => {
-    const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+    const targetGroupId = groupId || DEFAULT_GROUP_ID;
 
     let debounceTimer = null;
     const triggerUpdate = () => {
@@ -349,6 +533,8 @@ export const dashboardService = {
     const unsubLoans = onSnapshot(collection(db, 'groups', targetGroupId, 'loans'), triggerUpdate, (err) => console.warn('Loans listener error:', err));
     // Listen to repayments collection
     const unsubRepay = onSnapshot(collection(db, 'groups', targetGroupId, 'repayments'), triggerUpdate, (err) => console.warn('Repayments listener error:', err));
+    // Listen to activities collection
+    const unsubActivities = onSnapshot(collection(db, 'groups', targetGroupId, 'activities'), triggerUpdate, (err) => console.warn('Activities listener error:', err));
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -357,6 +543,7 @@ export const dashboardService = {
       unsubContrib();
       unsubLoans();
       unsubRepay();
+      unsubActivities();
     };
   },
 };

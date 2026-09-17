@@ -1,6 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   LayoutDashboard,
   Users,
@@ -12,15 +13,15 @@ import {
 } from 'lucide-react';
 
 const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
-  const { canManageGroup } = useAuth();
+  const { t } = useLanguage();
 
   const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Members', path: '/members', icon: Users },
-    { label: 'Monthly Savings', path: '/savings', icon: PiggyBank },
-    { label: 'Loans & Repayments', path: '/loans', icon: HandCoins },
-    { label: 'Reports', path: '/reports', icon: FileBarChart2 },
-    ...(canManageGroup ? [{ label: 'Settings', path: '/settings', icon: Settings }] : []),
+    { label: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
+    { label: t('nav.members'), path: '/members', icon: Users },
+    { label: t('nav.monthlySavings'), path: '/savings', icon: PiggyBank },
+    { label: t('nav.loansAndRepayments'), path: '/loans', icon: HandCoins },
+    { label: t('nav.reports'), path: '/reports', icon: FileBarChart2 },
+    { label: t('nav.settings'), path: '/settings', icon: Settings },
   ];
 
   return (
@@ -86,10 +87,10 @@ const Sidebar = ({ isMobileOpen, onCloseMobile }) => {
               </div>
               <div>
                 <h1 style={{ fontSize: '1.15rem', fontWeight: 800, color: 'var(--primary)', lineHeight: 1.1 }}>
-                  Bachat Gat
+                  {t('common.appName')}
                 </h1>
                 <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', fontWeight: 600, letterSpacing: '0.02em' }}>
-                  DIGITAL SAVINGS
+                  {t('common.digitalSavings')}
                 </span>
               </div>
             </div>

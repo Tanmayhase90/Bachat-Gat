@@ -1,25 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { savingsService } from '../services/savingsService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
-import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
-import { PiggyBank, Search, Plus, Filter, Calendar, Building2, User } from 'lucide-react';
+import { formatCurrency, formatDate, formatMonthYear, formatMonthlyHaftaDueDate } from '../utils/formatters';
+import { PiggyBank, Search, Plus, Filter, Calendar, Building2, User, Clock } from 'lucide-react';
 
 const Savings = () => {
-  const { user, isAdmin, isMember, canManageSavings } = useAuth();
+  const { monthlyHaftaDay, isAdmin } = useAuth();
+  const { t, language } = useLanguage();
   const outletContext = useOutletContext() || {};
   const { refreshTrigger = 0, openRecordSavings } = outletContext;
 
   const currentDate = new Date();
-  const [selectedMonth, setSelectedMonth] = useState('');
-  const [selectedYear, setSelectedYear] = useState('');
-  const [scope, setScope] = useState('all'); // 'all' | 'my'
+  const [selectedMonth, setSelectedMonth] = useState(String(currentDate.getMonth() + 1));
+  const [selectedYear, setSelectedYear] = useState(String(currentDate.getFullYear()));
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [savingsList, setSavingsList] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   const fetchSavings = async () => {
     try {
@@ -27,10 +36,7 @@ const Savings = () => {
       const params = {};
       if (selectedMonth) params.month = selectedMonth;
       if (selectedYear) params.year = selectedYear;
-      if (search) params.search = search;
-      if (scope === 'my' && user?.memberId) {
-        params.memberId = user.memberId;
-      }
+      if (debouncedSearch) params.search = debouncedSearch;
 
       const res = await savingsService.getAllSavings(params);
       if (res.success) {
@@ -46,22 +52,22 @@ const Savings = () => {
 
   useEffect(() => {
     fetchSavings();
-  }, [refreshTrigger, selectedMonth, selectedYear, scope, search]);
+  }, [refreshTrigger, selectedMonth, selectedYear, debouncedSearch]);
 
   const months = [
-    { value: '', label: 'All Months' },
-    { value: '1', label: 'January' },
-    { value: '2', label: 'February' },
-    { value: '3', label: 'March' },
-    { value: '4', label: 'April' },
-    { value: '5', label: 'May' },
-    { value: '6', label: 'June' },
-    { value: '7', label: 'July' },
-    { value: '8', label: 'August' },
-    { value: '9', label: 'September' },
-    { value: '10', label: 'October' },
-    { value: '11', label: 'November' },
-    { value: '12', label: 'December' },
+    { value: '', label: t('common.all') + ' ' + t('reports.selectMonthYear') },
+    { value: '1', label: t('common.months.1', 'January') },
+    { value: '2', label: t('common.months.2', 'February') },
+    { value: '3', label: t('common.months.3', 'March') },
+    { value: '4', label: t('common.months.4', 'April') },
+    { value: '5', label: t('common.months.5', 'May') },
+    { value: '6', label: t('common.months.6', 'June') },
+    { value: '7', label: t('common.months.7', 'July') },
+    { value: '8', label: t('common.months.8', 'August') },
+    { value: '9', label: t('common.months.9', 'September') },
+    { value: '10', label: t('common.months.10', 'October') },
+    { value: '11', label: t('common.months.11', 'November') },
+    { value: '12', label: t('common.months.12', 'December') },
   ];
 
   return (
@@ -69,17 +75,21 @@ const Savings = () => {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px' }}>
         <div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>Group Monthly Savings</h1>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 800 }}>{t('savings.title')}</h1>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem' }}>
-            Record and review member regular monthly contributions and hafta records
+            {t('savings.subtitle')}
           </p>
         </div>
 
-        {isAdmin && (
-          <button onClick={openRecordSavings} className="btn-primary">
-            <Plus size={18} /> Record Monthly Savings
-          </button>
-        )}
+        <button
+          onClick={() => openRecordSavings({
+            month: selectedMonth ? Number(selectedMonth) : (currentDate.getMonth() + 1),
+            year: selectedYear ? Number(selectedYear) : currentDate.getFullYear(),
+          })}
+          className="btn-primary"
+        >
+          <Plus size={18} /> {t('savings.recordSavingsBtn')}
+        </button>
       </div>
 
       {/* Filter Row */}
@@ -95,58 +105,13 @@ const Savings = () => {
         }}
       >
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
-          {/* Scope Filter for Members */}
-          {user?.memberId && (
-            <div style={{ display: 'flex', background: '#F1F5F9', padding: '3px', borderRadius: 'var(--radius-md)', gap: '4px' }}>
-              <button
-                type="button"
-                onClick={() => setScope('all')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  background: scope === 'all' ? '#FFFFFF' : 'transparent',
-                  color: scope === 'all' ? 'var(--primary)' : 'var(--text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: scope === 'all' ? 'var(--shadow-xs)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <Building2 size={13} /> All Group Savings
-              </button>
-              <button
-                type="button"
-                onClick={() => setScope('my')}
-                style={{
-                  padding: '6px 12px',
-                  borderRadius: 'var(--radius-sm)',
-                  fontSize: '0.8rem',
-                  fontWeight: 600,
-                  background: scope === 'my' ? '#FFFFFF' : 'transparent',
-                  color: scope === 'my' ? 'var(--primary)' : 'var(--text-secondary)',
-                  border: 'none',
-                  cursor: 'pointer',
-                  boxShadow: scope === 'my' ? 'var(--shadow-xs)' : 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-              >
-                <User size={13} /> My Savings
-              </button>
-            </div>
-          )}
 
           <div style={{ position: 'relative' }}>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="form-select"
-              style={{ width: '140px', fontSize: '0.85rem' }}
+              style={{ width: '160px', fontSize: '0.85rem' }}
             >
               {months.map((m) => (
                 <option key={m.value} value={m.value}>
@@ -163,11 +128,30 @@ const Savings = () => {
               className="form-select"
               style={{ width: '120px', fontSize: '0.85rem' }}
             >
-              <option value="">All Years</option>
+              <option value="">{t('common.all')} {t('common.date')}</option>
               <option value="2025">2025</option>
               <option value="2026">2026</option>
               <option value="2027">2027</option>
             </select>
+          </div>
+
+          {/* Monthly Hafta Due Date Badge */}
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '6px 12px',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--accent-soft)',
+              border: '1px solid rgba(236, 72, 153, 0.25)',
+              color: 'var(--primary)',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+            }}
+          >
+            <Clock size={14} />
+            <span>{formatMonthlyHaftaDueDate(monthlyHaftaDay, language)}</span>
           </div>
 
           {(selectedMonth || selectedYear) && (
@@ -178,7 +162,7 @@ const Savings = () => {
               }}
               style={{ background: 'none', color: 'var(--primary)', fontSize: '0.8rem', fontWeight: 600 }}
             >
-              Reset Filters
+              {t('common.cancel')}
             </button>
           )}
         </div>
@@ -194,7 +178,7 @@ const Savings = () => {
               type="text"
               className="form-input"
               style={{ paddingLeft: '36px', fontSize: '0.85rem' }}
-              placeholder="Search member..."
+              placeholder={t('members.searchPlaceholder')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -214,7 +198,7 @@ const Savings = () => {
               gap: '6px',
             }}
           >
-            <span>Total: {formatCurrency(totalAmount)}</span>
+            <span>{t('common.total')}: {formatCurrency(totalAmount)}</span>
           </div>
         </div>
       </div>
@@ -222,27 +206,30 @@ const Savings = () => {
       {/* Savings Table */}
       <div className="card" style={{ padding: '0px', overflow: 'hidden' }}>
         {loading ? (
-          <Loader text="Loading savings records..." />
+          <Loader text={t('common.loadingData')} />
         ) : (!savingsList || savingsList.length === 0) ? (
           <EmptyState
             icon={PiggyBank}
-            title="No savings records found"
-            description="No savings records match your active search and filters."
-            actionText={isAdmin ? 'Record Savings' : undefined}
-            onAction={openRecordSavings}
+            title={t('savings.noSavingsRecorded')}
+            description={t('savings.noSavingsRecorded')}
+            actionText={isAdmin ? t('savings.recordSavingsBtn') : undefined}
+            onAction={() => openRecordSavings({
+              month: selectedMonth ? Number(selectedMonth) : (currentDate.getMonth() + 1),
+              year: selectedYear ? Number(selectedYear) : currentDate.getFullYear(),
+            })}
           />
         ) : (
           <div className="table-responsive">
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th>Member</th>
-                  <th>Month & Year</th>
-                  <th>Amount</th>
-                  <th>Payment Date</th>
-                  <th>Mode</th>
-                  <th>Remarks</th>
-                  <th>Recorded By</th>
+                  <th>{t('savings.tableMemberName')}</th>
+                  <th>{t('savings.monthYearFilter')}</th>
+                  <th>{t('savings.tableShareAmount')}</th>
+                  <th>{t('savings.tablePaymentDate')}</th>
+                  <th>{t('savings.tablePaymentMode')}</th>
+                  <th>{t('common.notes')}</th>
+                  <th>{t('common.status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -253,7 +240,7 @@ const Savings = () => {
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{s.member_code || s.memberCode}</div>
                     </td>
                     <td style={{ fontWeight: 600, color: 'var(--primary)' }}>
-                      {formatMonthYear(s.month, s.year)}
+                      {formatMonthYear(s.month, s.year, language)}
                     </td>
                     <td style={{ fontWeight: 800, color: 'var(--success-text)', fontSize: '1rem' }}>
                       {formatCurrency(s.amount)}
@@ -263,7 +250,9 @@ const Savings = () => {
                       <span className="badge badge-info">{s.payment_mode || s.paymentMode || 'UPI'}</span>
                     </td>
                     <td style={{ color: 'var(--text-secondary)' }}>{s.remarks || '—'}</td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{s.recorded_by_name || 'System'}</td>
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      <span className="badge badge-success">{t('common.paid')}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>

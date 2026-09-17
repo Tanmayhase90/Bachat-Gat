@@ -1,0 +1,303 @@
+1
+00:00:00,100 --> 00:00:06,935
+Hello and welcome to the comprehensive project demonstration of the Bachat Gat Digital Savings Group Management System.
+
+2
+00:00:06,885 --> 00:00:17,595
+A Bachat Gat, or Self-Help Group, is a vital community microfinance institution that empowers women and families in rural communities through collective thrift and mutual credit.
+
+3
+00:00:17,595 --> 00:00:24,576
+Traditionally, self-help groups managed all contributions and loan accounts in handwritten physical paper ledgers.
+
+4
+00:00:24,576 --> 00:00:31,334
+This frequently led to calculation errors, damaged books, lack of transparency, and delayed audits.
+
+5
+00:00:31,334 --> 00:00:38,305
+To resolve these challenges permanently, we engineered this modern, robust, and fully digital web application.
+
+6
+00:00:38,305 --> 00:00:48,707
+The platform provides centralized member management, monthly savings tracking, automated loan disbursement, interest accounting, repayments, and official financial registers.
+
+7
+00:00:48,707 --> 00:00:54,036
+Let us begin by exploring the authentication system and role-based access control.
+
+8
+00:00:54,036 --> 00:01:03,972
+To ensure financial integrity, the application strictly enforces role-based permissions, restricting administrative controls to verified group administrators.
+
+9
+00:01:03,972 --> 00:01:12,828
+The admin login screen features clean, blank email and password inputs to respect user privacy and prevent unauthorized access.
+
+10
+00:01:12,828 --> 00:01:20,561
+It provides a password visibility toggle as well as a secure self-service password reset flow via Firebase Authentication.
+
+11
+00:01:20,561 --> 00:01:26,483
+Let us now log in using the verified administrator credentials and enter the live portal.
+
+12
+00:01:26,483 --> 00:01:31,716
+Upon successful authentication, we arrive at the central executive Dashboard.
+
+13
+00:01:31,716 --> 00:01:39,703
+The top header proudly displays the organization name, Chhatrapati Bachat Gat, Ghargaon Stand, alongside the Total Group Fund.
+
+14
+00:01:39,703 --> 00:01:46,091
+Four core financial KPI cards provide instantaneous visibility into the group's financial health.
+
+15
+00:01:46,091 --> 00:01:53,432
+The first card is Total Savings, representing eight thousand rupees in lifetime member contributions collected to date.
+
+16
+00:01:53,432 --> 00:02:00,752
+The second card is Active Loans, reflecting four thousand rupees currently outstanding across active borrower accounts.
+
+17
+00:02:00,752 --> 00:02:07,309
+The third card is Total Interest Earned, displaying the cumulative interest accrued from lending operations.
+
+18
+00:02:07,309 --> 00:02:14,703
+The fourth card is Available Balance, showing four thousand rupees in liquid cash ready for fresh micro-loan disbursements.
+
+19
+00:02:14,703 --> 00:02:23,167
+Here, Total Group Fund equals Total Savings plus Total Interest, and Available Balance equals Total Group Fund minus Active Loans.
+
+20
+00:02:23,167 --> 00:02:32,277
+Below these cards, the Monthly Savings Target progress bar highlights the three lakh sixty-four thousand rupee goal, tracking paid versus pending members.
+
+21
+00:02:32,277 --> 00:02:36,355
+Next, let us navigate via the sidebar to Group Settings.
+
+22
+00:02:36,355 --> 00:02:42,044
+This administrative console governs the foundational operating rules of the savings group.
+
+23
+00:02:42,044 --> 00:02:55,031
+Here, the group name is established as Chhatrapati Bachat Gat, Ghargaon Stand, with a standard Monthly Contribution of one thousand rupees per share, and the Monthly Hafta Due Date set to the tenth of every month.
+
+24
+00:02:55,031 --> 00:03:03,760
+Based on the three hundred and sixty-four registered members, the monthly group target of three lakh sixty-four thousand rupees is dynamically computed.
+
+25
+00:03:03,760 --> 00:03:12,817
+Any modification saved here instantly synchronizes across all calculations, dashboard metrics, and monthly financial reports in real time.
+
+26
+00:03:12,817 --> 00:03:15,741
+Let us now inspect the Members module.
+
+27
+00:03:15,741 --> 00:03:21,493
+Chhatrapati Bachat Gat currently maintains three hundred and sixty-four registered community members.
+
+28
+00:03:21,493 --> 00:03:32,288
+Crucially, all members are strictly sorted in ascending numerical order by their Member ID, progressing smoothly from M-one, M-two, all the way to M-three hundred and sixty-four.
+
+29
+00:03:32,288 --> 00:03:42,033
+Administrators can toggle between All Members and Pending Dues tabs, or utilize the responsive search bar to locate members instantly by name or code.
+
+30
+00:03:42,033 --> 00:03:47,002
+Opening an individual member profile reveals their complete financial ledger.
+
+31
+00:03:47,002 --> 00:03:57,595
+Real phone numbers are displayed with the international plus ninety-one prefix, while members without a recorded phone number remain cleanly blank without confusing fake numbers.
+
+32
+00:03:57,595 --> 00:04:03,675
+Add Member and Edit Member modals make member administration effortless and transparent.
+
+33
+00:04:03,796 --> 00:04:07,135
+Now let us examine the Monthly Savings register.
+
+34
+00:04:07,085 --> 00:04:11,503
+Regular thrift collection is the lifeblood of every self-help group.
+
+35
+00:04:11,503 --> 00:04:17,806
+This module enables filtering by month and year to inspect contribution records across the group.
+
+36
+00:04:17,806 --> 00:04:25,962
+The table displays member details, contribution amount, payment date, and payment mode, alongside the aggregate collection badge.
+
+37
+00:04:25,962 --> 00:04:36,534
+When recording a contribution via the Record Savings action, administrators select the member and payment mode such as Cash, UPI, Bank Transfer, or Cheque.
+
+38
+00:04:36,534 --> 00:04:42,880
+To eliminate accidental duplicate entries, the system features an explicit Double-Confirmation Modal.
+
+39
+00:04:42,880 --> 00:04:51,693
+The modal presents a clear confirmation prompt stating the exact month, year, and contribution amount, proceeding only when the user confirms.
+
+40
+00:04:51,693 --> 00:04:55,316
+Next, we move to the Loans and Repayments module.
+
+41
+00:04:55,316 --> 00:05:00,920
+Providing timely credit access to member entrepreneurs is a central mission of the Bachat Gat.
+
+42
+00:05:00,920 --> 00:05:10,316
+The module organizes loans into Active Loans and Closed Loans tabs, with summary metrics tracking total disbursed capital and outstanding principal.
+
+43
+00:05:10,316 --> 00:05:22,541
+Clicking Issue Loan opens the loan issuance modal, where administrators select the borrowing member, enter the principal amount, tenure in months, and the standard monthly interest rate of two percent.
+
+44
+00:05:22,541 --> 00:05:33,854
+The system performs real-time liquidity validation against available group funds and prompts the administrator with a Double-Confirmation dialog before disbursement, preventing erroneous transactions.
+
+45
+00:05:33,854 --> 00:05:37,329
+Let us now examine the Loan Repayment workflow.
+
+46
+00:05:37,329 --> 00:05:48,261
+Clicking Loan Repayment opens the repayment register, listing every member with an active loan, original borrowing amount, paid principal, remaining principal, and accrued interest.
+
+47
+00:05:48,261 --> 00:05:55,433
+Selecting a loan launches the repayment drawer, which automatically computes the applicable monthly interest at two percent.
+
+48
+00:05:55,433 --> 00:06:03,695
+Borrowers can make interest-only payments or contribute towards principal repayment, with the new outstanding balance updated dynamically.
+
+49
+00:06:03,695 --> 00:06:10,549
+Submitting the payment triggers a Double-Confirmation Modal displaying the borrower name and exact repayment amount.
+
+50
+00:06:10,549 --> 00:06:18,876
+Upon confirmation, the transaction is recorded, and loans reaching zero outstanding principal are automatically marked as CLOSED.
+
+51
+00:06:18,876 --> 00:06:23,473
+Now let us explore the comprehensive Financial Reports and Registers.
+
+52
+00:06:23,473 --> 00:06:30,189
+Transparent reporting is indispensable for group governance, annual general meetings, and statutory audits.
+
+53
+00:06:30,189 --> 00:06:44,479
+The primary report is the Monthly Financial Register, displaying all three hundred and sixty-four members sorted numerically from M-one to M-three hundred and sixty-four, detailing savings, loans, interest, repayments, and net pending dues.
+
+54
+00:06:44,479 --> 00:06:51,672
+The Pending Dues tab filters down to members with outstanding obligations, preserving exact numerical order.
+
+55
+00:06:51,672 --> 00:06:56,026
+The Loans Overview tab provides an end-to-end loan book audit.
+
+56
+00:06:56,026 --> 00:07:04,787
+Reports can be reviewed in printable view, sent directly to physical print, or exported as structured CSV files for spreadsheet accounting.
+
+57
+00:07:04,787 --> 00:07:10,032
+Returning to the Dashboard, let us review the Recent Transactions and Activity feed.
+
+58
+00:07:10,032 --> 00:07:14,130
+Clicking View All opens the comprehensive activity ledger modal.
+
+59
+00:07:14,130 --> 00:07:19,924
+A standout feature here is the multi-category transaction filter, mirroring the mobile experience.
+
+60
+00:07:19,924 --> 00:07:30,751
+Users can filter transactions across eight distinct categories: All, monthlyInvestment, loanIssue, loanRepayment, interestPayment, adjustment, otherIncome, and otherExpense.
+
+61
+00:07:30,751 --> 00:07:37,859
+This targeted filtering allows auditors and administrators to isolate specific financial events instantly.
+
+62
+00:07:37,859 --> 00:07:44,013
+Let us now review the underlying mathematical formulas and business invariants governing the platform.
+
+63
+00:07:44,013 --> 00:07:54,384
+All figures are calculated dynamically from database collections using formal invariants: Monthly Target equals Total Active Members multiplied by Monthly Share.
+
+64
+00:07:54,384 --> 00:07:59,554
+Total Group Fund equals Total Member Savings plus Total Cumulative Interest.
+
+65
+00:07:59,554 --> 00:08:04,501
+Available Balance equals Total Group Fund minus Active Loans Outstanding.
+
+66
+00:08:04,501 --> 00:08:11,185
+Monthly Interest equals Outstanding Principal multiplied by the monthly interest rate divided by one hundred.
+
+67
+00:08:11,185 --> 00:08:18,304
+These strict invariants ensure that accounting remains mathematically consistent and audit-ready at all times.
+
+68
+00:08:18,412 --> 00:08:24,961
+Now let us review the software architecture and technology stack verified directly from the project source.
+
+69
+00:08:24,911 --> 00:08:33,068
+The client interface is built with React eighteen and bundled via Vite for lightning-fast responsiveness and modular code-splitting.
+
+70
+00:08:33,068 --> 00:08:40,790
+The backend data store utilizes Google Firebase Firestore, providing real-time document synchronization across collections.
+
+71
+00:08:40,790 --> 00:08:46,585
+Security is enforced through Firebase Authentication combined with role-based access rules.
+
+72
+00:08:46,585 --> 00:08:53,608
+The application also features a dynamic internationalization context supporting both Marathi and English.
+
+73
+00:08:53,608 --> 00:09:00,155
+The entire user interface is fully responsive across desktop, tablet, and mobile screens.
+
+74
+00:09:00,155 --> 00:09:09,244
+In conclusion, the Chhatrapati Bachat Gat Management System is a complete, enterprise-grade digital platform designed for grassroots financial inclusion.
+
+75
+00:09:09,244 --> 00:09:20,695
+By digitizing member profiles, savings collection, micro-loans, repayments, and audit-ready reporting, it establishes total transparency, trust, and accountability for self-help groups.
+
+76
+00:09:20,695 --> 00:09:23,873
+Thank you for watching this project demonstration!

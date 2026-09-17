@@ -63,7 +63,7 @@ const db = getFirestore(app);
 
 const targetName = (process.argv[2] || 'Rutik').trim().toLowerCase();
 const dryRun = process.argv.includes('--dry-run');
-const groupId = 'shivshahi_group_001';
+const groupId = 'chhatrapati_group_001';
 
 function matchesName(data = {}) {
   const candidates = [

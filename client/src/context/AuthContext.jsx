@@ -41,59 +41,58 @@ async function resolveUserProfile(currentFirebaseUser) {
     console.warn('Notice: Failed reading users/{uid}:', err);
   }
 
-  // 2. Look up member in subcollection groups/shivshahi_group_001/members
-  if (memberId) {
-    try {
-      const memDoc = await getDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', memberId));
-      if (memDoc.exists()) {
-        memberData = memDoc.data();
+  // 2. Look up member in subcollection groups/chhatrapati_group_001/members
+  try {
+    // Priority A: If memberId is known from users/{uid}, fetch directly (1 document read)
+    if (memberId) {
+      const memberDocSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', memberId)).catch(() => null);
+      if (memberDocSnap && memberDocSnap.exists()) {
+        const m = memberDocSnap.data();
+        if (!cleanEmail || !m.email || m.email.trim().toLowerCase() === cleanEmail) {
+          memberData = m;
+        }
       }
-    } catch (e) {
-      // ignore
     }
-  }
 
-  if (!memberData) {
-    try {
-      const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
-      const found = membersSnap.docs.find((d) => {
-        const m = d.data();
-        return (
-          d.id === currentFirebaseUser.uid ||
-          m.userId === currentFirebaseUser.uid ||
-          m.authUid === currentFirebaseUser.uid ||
-          m.firebaseUid === currentFirebaseUser.uid ||
-          m.uid === currentFirebaseUser.uid ||
-          (cleanEmail && m.email && m.email.toLowerCase() === cleanEmail)
-        );
-      });
-
-      if (found) {
-        memberData = found.data();
-        memberId = found.id;
+    // Priority B: Direct query by email
+    if (!memberData && cleanEmail) {
+      const emailSnap = await getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('email', '==', cleanEmail))).catch(() => ({ docs: [] }));
+      if (emailSnap.docs.length > 0) {
+        memberData = emailSnap.docs[0].data();
+        memberId = emailSnap.docs[0].id;
       }
-    } catch (err) {
-      console.warn('Notice: Member lookup query:', err);
     }
-  }
 
-  // Check top-level members collection
-  if (!memberData) {
-    try {
-      const topDoc = await getDoc(doc(db, 'members', currentFirebaseUser.uid)).catch(() => null);
-      if (topDoc && topDoc.exists()) {
-        memberData = topDoc.data();
-        memberId = topDoc.id;
+    // Priority C: Direct query by userId / authUid
+    if (!memberData) {
+      const [uidSnap, authUidSnap] = await Promise.all([
+        getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('userId', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
+        getDocs(query(collection(db, 'groups', 'chhatrapati_group_001', 'members'), where('authUid', '==', currentFirebaseUser.uid))).catch(() => ({ docs: [] })),
+      ]);
+
+      const foundDoc = uidSnap.docs[0] || authUidSnap.docs[0];
+      if (foundDoc) {
+        memberData = foundDoc.data();
+        memberId = foundDoc.id;
       }
-    } catch (e) {
-      // ignore
     }
+
+    // Priority D: Fallback by direct member ID match
+    if (!memberData) {
+      const directSnap = await getDoc(doc(db, 'groups', 'chhatrapati_group_001', 'members', currentFirebaseUser.uid)).catch(() => null);
+      if (directSnap && directSnap.exists()) {
+        memberData = directSnap.data();
+        memberId = directSnap.id;
+      }
+    }
+  } catch (err) {
+    console.warn('Notice: Member lookup query:', err);
   }
 
   // 3. Resolve active group details
   let currentGroupName = 'Chhatrapati Bachat Gat, Ghargaon Stand';
   try {
-    const gRes = await groupService.getGroupDetails(userData?.groupId || memberData?.groupId || 'shivshahi_group_001');
+    const gRes = await groupService.getGroupDetails(userData?.groupId || memberData?.groupId || 'chhatrapati_group_001');
     if (gRes.group?.groupName || gRes.group?.name) {
       currentGroupName = gRes.group.groupName || gRes.group.name;
     }
@@ -104,44 +103,8 @@ async function resolveUserProfile(currentFirebaseUser) {
   // 4. Resolve full name, phone, and role
   const isUserAdmin = userData?.role === 'admin' || userData?.role_name === 'ADMIN' || memberData?.role === 'admin' || memberData?.role_name === 'ADMIN';
   const rawRole = isUserAdmin ? 'admin' : (userData?.role || memberData?.role || 'member').toLowerCase();
-  const fullName = userData?.fullName || userData?.name || memberData?.fullName || memberData?.name || currentFirebaseUser.displayName || (currentFirebaseUser.email ? currentFirebaseUser.email.split('@')[0] : 'Member');
+  const fullName = userData?.fullName || userData?.name || memberData?.fullName || memberData?.name || currentFirebaseUser.displayName || (currentFirebaseUser.email ? currentFirebaseUser.email.split('@')[0] : 'Admin');
   const phone = userData?.phone || memberData?.phone || '';
-
-  // 5. If member record still doesn't exist, auto-create under groups/shivshahi_group_001/members
-  if (!memberData) {
-    try {
-      const membersSnap = await getDocs(collection(db, 'groups', 'shivshahi_group_001', 'members')).catch(() => ({ docs: [] }));
-      let maxNum = 0;
-      membersSnap.docs.forEach((d) => {
-        const num = parseInt(d.id.replace(/\D/g, ''), 10);
-        if (!isNaN(num) && num > maxNum) maxNum = num;
-      });
-      memberId = `M_${maxNum + 1}`;
-      memberData = {
-        id: memberId,
-        userId: currentFirebaseUser.uid,
-        authUid: currentFirebaseUser.uid,
-        firebaseUid: currentFirebaseUser.uid,
-        groupId: 'shivshahi_group_001',
-        name: fullName,
-        fullName: fullName,
-        email: cleanEmail,
-        phone: phone,
-        shares: 1,
-        shareCount: 1,
-        monthlyContribution: 1000,
-        monthlyContributionPerShare: 1000,
-        monthlyHaftaAmount: 1000,
-        status: 'active',
-        joinDate: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      await setDoc(doc(db, 'groups', 'shivshahi_group_001', 'members', memberId), memberData, { merge: true });
-    } catch (e) {
-      console.warn('Notice: Auto-create member in context:', e);
-    }
-  }
 
   const resolvedUser = {
     ...memberData,
@@ -159,8 +122,8 @@ async function resolveUserProfile(currentFirebaseUser) {
     memberCode: memberData?.memberCode || userData?.memberCode || memberId || '',
   };
 
-  // If user document didn't exist in users/{uid}, ensure it is saved
-  if (!userData || !userData.memberId) {
+  // If user document didn't exist in users/{uid} and is admin, ensure it is saved
+  if (!userData && isUserAdmin) {
     try {
       await setDoc(doc(db, 'users', currentFirebaseUser.uid), {
         uid: currentFirebaseUser.uid,
@@ -169,18 +132,16 @@ async function resolveUserProfile(currentFirebaseUser) {
         name: fullName,
         email: currentFirebaseUser.email,
         phone,
-        role: rawRole,
-        role_name: rawRole.toUpperCase(),
+        role: 'admin',
+        role_name: 'ADMIN',
         isActive: true,
-        memberId: memberId || '',
-        memberCode: memberData?.memberCode || memberId || '',
-        groupId: 'shivshahi_group_001',
+        groupId: 'chhatrapati_group_001',
         groupName: currentGroupName,
-        createdAt: userData?.createdAt || serverTimestamp(),
+        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       }, { merge: true });
     } catch (e) {
-      console.warn('Notice: Auto-sync user doc:', e);
+      console.warn('Notice: Auto-sync admin user doc:', e);
     }
   }
 
@@ -208,21 +169,66 @@ export const AuthProvider = ({ children }) => {
     }
   });
 
+  const [monthlyHaftaDay, setMonthlyHaftaDay] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bachat_user');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return parsed?.monthlyHaftaDay || parsed?.monthly_hafta_day || 10;
+    } catch (e) {
+      return 10;
+    }
+  });
+
+  const [monthlyContributionPerShare, setMonthlyContributionPerShare] = useState(() => {
+    try {
+      const stored = localStorage.getItem('bachat_user');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return Number(parsed?.monthlyContributionPerShare ?? parsed?.monthly_contribution_per_share ?? 1000) || 1000;
+    } catch (e) {
+      return 1000;
+    }
+  });
+
   const [token, setToken] = useState(localStorage.getItem('bachat_token') || null);
   const [loading, setLoading] = useState(true);
 
   // 1. Listen for real-time changes to the active Group document in Firestore
   useEffect(() => {
-    const groupDocRef = doc(db, 'groups', 'shivshahi_group_001');
+    const groupDocRef = doc(db, 'groups', 'chhatrapati_group_001');
     const unsubscribeGroup = onSnapshot(groupDocRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         const liveName = data.groupName || data.group_name;
-        if (liveName) {
-          setGroupName(liveName);
+        const liveDueDay = parseInt(data.monthlyHaftaDay ?? data.monthly_hafta_day, 10) || 10;
+        const liveShare = Number(
+          data.monthly_contribution_per_share ??
+          data.monthlyContributionPerShare ??
+          data.monthlyContribution ??
+          data.monthly_contribution ??
+          data.monthlyShare ??
+          data.monthly_share ??
+          data.monthlyContributionAmount ??
+          1000
+        ) || 1000;
+
+        if (liveDueDay) {
+          setMonthlyHaftaDay(liveDueDay);
+        }
+        if (liveShare) {
+          setMonthlyContributionPerShare(liveShare);
+        }
+        if (liveName || liveDueDay || liveShare) {
+          if (liveName) setGroupName(liveName);
           setUser((prev) => {
             if (!prev) return prev;
-            const updated = { ...prev, groupName: liveName };
+            const updated = {
+              ...prev,
+              ...(liveName ? { groupName: liveName } : {}),
+              monthlyHaftaDay: liveDueDay,
+              monthly_hafta_day: liveDueDay,
+              monthlyContributionPerShare: liveShare,
+              monthly_contribution_per_share: liveShare,
+            };
             localStorage.setItem('bachat_user', JSON.stringify(updated));
             return updated;
           });
@@ -381,18 +387,18 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  const normalizedRole = (user?.role || 'member').toLowerCase();
-  const roleName = normalizedRole.toUpperCase();
-  const isAdmin = normalizedRole === 'admin';
-  const isTreasurer = normalizedRole === 'treasurer';
-  const isSecretary = normalizedRole === 'secretary';
-  const isMember = normalizedRole === 'member';
+  const normalizedRole = (user?.role || user?.role_name || '').toLowerCase();
+  const roleName = (user?.role_name || (normalizedRole ? normalizedRole.toUpperCase() : 'ADMIN'));
+  const isAdmin = normalizedRole === 'admin' || roleName === 'ADMIN';
+  const isTreasurer = false;
+  const isSecretary = false;
+  const isMember = false;
 
-  // Permission capabilities
-  const canManageMembers = isAdmin || isSecretary;
-  const canManageSavings = isAdmin || isTreasurer;
-  const canManageLoans = isAdmin || isTreasurer;
-  const canManageGroup = isAdmin;
+  // Permission capabilities in Web Admin Portal (Admin has full control)
+  const canManageMembers = true;
+  const canManageSavings = true;
+  const canManageLoans = true;
+  const canManageGroup = true;
 
   const value = {
     firebaseUser,
@@ -409,6 +415,10 @@ export const AuthProvider = ({ children }) => {
     isSecretary,
     isMember,
     groupName: groupName || user?.groupName || 'Chhatrapati Bachat Gat',
+    monthlyHaftaDay: monthlyHaftaDay || 10,
+    monthly_hafta_day: monthlyHaftaDay || 10,
+    monthlyContributionPerShare: monthlyContributionPerShare || 1000,
+    monthly_contribution_per_share: monthlyContributionPerShare || 1000,
     token,
     loading,
     login,
@@ -417,6 +427,8 @@ export const AuthProvider = ({ children }) => {
     refreshUser,
     updateProfile,
     updateGroupName,
+    updateMonthlyHaftaDay: (d) => setMonthlyHaftaDay(parseInt(d, 10) || 10),
+    updateMonthlyContributionPerShare: (val) => setMonthlyContributionPerShare(Number(val) || 1000),
     isAuthenticated: !!token && !!user,
     canManageMembers,
     canManageSavings,

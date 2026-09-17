@@ -105,7 +105,7 @@ async function createAdmin() {
       role: 'admin',
       role_name: 'ADMIN',
       isActive: true,
-      groupId: 'shivshahi_group_001',
+      groupId: 'chhatrapati_group_001',
       groupName: 'Chhatrapati Bachat Gat',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -114,13 +114,13 @@ async function createAdmin() {
     console.log(`✔ Firestore document created/updated in users/${uid} with role: "admin"`);
 
     // 3. Ensure Default Group document exists
-    const groupDocRef = doc(db, 'groups', 'shivshahi_group_001');
+    const groupDocRef = doc(db, 'groups', 'chhatrapati_group_001');
     await setDoc(groupDocRef, {
-      groupId: 'shivshahi_group_001',
+      groupId: 'chhatrapati_group_001',
       groupName: 'Chhatrapati Bachat Gat',
       group_name: 'Chhatrapati Bachat Gat',
-      groupCode: 'shivshahi_group_001',
-      group_code: 'shivshahi_group_001',
+      groupCode: 'chhatrapati_group_001',
+      group_code: 'chhatrapati_group_001',
       monthlyContribution: 1000,
       monthly_contribution_per_share: 1000,
       monthlyTarget: 363000,
@@ -131,7 +131,7 @@ async function createAdmin() {
       updatedAt: serverTimestamp(),
     }, { merge: true });
 
-    console.log(`✔ Default Group document verified in groups/shivshahi_group_001`);
+    console.log(`✔ Default Group document verified in groups/chhatrapati_group_001`);
     console.log(`\n🎉 Admin user creation completed successfully!`);
     console.log(`   You can now log in via the "Admin Login" tab with:\n   Email: ${email}\n   Password: ${password}\n`);
     process.exit(0);

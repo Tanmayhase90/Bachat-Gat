@@ -1,44 +1,37 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { authService } from '../services/authService';
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { login } = useAuth();
 
-  const [activeTab, setActiveTab] = useState('member'); // 'member' | 'admin'
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [successInfo, setSuccessInfo] = useState('');
+  const [error, setError] = useState(location.state?.error || '');
+  const [successInfo, setSuccessInfo] = useState(location.state?.message || '');
 
-  // Load any registration success info or registered email on initial mount only
   useEffect(() => {
+    setEmail('');
+    setPassword('');
+    if (location.state?.error) {
+      setError(location.state.error);
+    }
     if (location.state?.message) {
       setSuccessInfo(location.state.message);
     }
-    if (location.state?.registeredEmail) {
-      setEmail(location.state.registeredEmail);
-      setActiveTab('member');
-    }
-  }, []);
-
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-    setError('');
-    setSuccessInfo('');
-  };
+  }, [location.state]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setError('Please provide both email and password.');
+      setError('Please provide both admin email and password.');
       return;
     }
 
@@ -46,11 +39,11 @@ const Login = () => {
       setLoading(true);
       setError('');
       setSuccessInfo('');
-      // Authenticate with Firebase and enforce role based on selected tab ('admin' | 'member')
-      await login(email.trim(), password, activeTab);
+      // Authenticate with Firebase and enforce Admin role
+      await login(email.trim(), password, 'admin');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message || 'Login failed. Please check credentials.');
+      setError(err.message || 'Login failed. Please check your admin credentials.');
     } finally {
       setLoading(false);
     }
@@ -59,7 +52,7 @@ const Login = () => {
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       setSuccessInfo('');
-      setError('Please enter your email address first.');
+      setError('Please enter your admin email address first.');
       return;
     }
 
@@ -75,9 +68,6 @@ const Login = () => {
       setResetLoading(false);
     }
   };
-
-  const emailFieldName = activeTab === 'admin' ? 'admin_login_email' : 'member_login_email';
-  const passwordFieldName = activeTab === 'admin' ? 'admin_login_password' : 'member_login_password';
 
   return (
     <div
@@ -155,62 +145,29 @@ const Login = () => {
           <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--primary)' }}>
             Bachat Gat
           </h1>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '4px' }}>
-            Digital Savings Group Management System
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              background: 'var(--accent-soft)',
+              color: 'var(--primary)',
+              padding: '4px 12px',
+              borderRadius: 'var(--radius-full)',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              marginTop: '6px',
+              letterSpacing: '0.03em',
+            }}
+          >
+            <ShieldCheck size={14} /> ADMIN MANAGEMENT PORTAL
+          </div>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '8px' }}>
+            Sign in to access administrator management panel
           </p>
         </div>
 
-        {/* Login Role Tabs */}
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', background: '#F1F5F9', padding: '4px', borderRadius: 'var(--radius-lg)' }}>
-            <button
-              type="button"
-              onClick={() => handleTabChange('member')}
-              aria-pressed={activeTab === 'member'}
-              style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: activeTab === 'member' ? '#FFFFFF' : 'transparent',
-                border: activeTab === 'member' ? '1px solid var(--border-color)' : 'none',
-                color: activeTab === 'member' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: activeTab === 'member' ? 'var(--shadow-xs)' : 'none',
-                transition: 'var(--transition)',
-              }}
-            >
-              <UserCheck size={16} /> Member Login
-            </button>
-            <button
-              type="button"
-              onClick={() => handleTabChange('admin')}
-              aria-pressed={activeTab === 'admin'}
-              style={{
-                padding: '10px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: activeTab === 'admin' ? '#FFFFFF' : 'transparent',
-                border: activeTab === 'admin' ? '1px solid var(--border-color)' : 'none',
-                color: activeTab === 'admin' ? 'var(--primary)' : 'var(--text-secondary)',
-                fontSize: '0.875rem',
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                boxShadow: activeTab === 'admin' ? 'var(--shadow-xs)' : 'none',
-                transition: 'var(--transition)',
-              }}
-            >
-              <ShieldCheck size={16} /> Admin Login
-            </button>
-          </div>
-        </div>
-
-        {/* Success Alert from Register Page */}
+        {/* Success Alert */}
         {successInfo && (
           <div
             style={{
@@ -256,7 +213,7 @@ const Login = () => {
         >
           <div className="form-group">
             <label className="form-label" htmlFor="login_email_input">
-              {activeTab === 'admin' ? 'Admin Email' : 'Member Email'}
+              Admin Email ID
             </label>
             <div style={{ position: 'relative' }}>
               <Mail
@@ -268,12 +225,12 @@ const Login = () => {
                 id="login_email_input"
                 name="email"
                 type="email"
-                autoComplete="email"
+                autoComplete="off"
                 autoCapitalize="off"
                 spellCheck="false"
                 className="form-input"
                 style={{ paddingLeft: '38px' }}
-                placeholder={activeTab === 'admin' ? 'admin@example.com' : 'member@example.com'}
+                placeholder="admin@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -284,7 +241,7 @@ const Login = () => {
           <div className="form-group">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
               <label className="form-label" htmlFor="login_password_input">
-                Password
+                Admin Password
               </label>
               <button
                 type="button"
@@ -311,10 +268,10 @@ const Login = () => {
                 id="login_password_input"
                 name="password"
                 type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
+                autoComplete="new-password"
                 className="form-input"
                 style={{ paddingLeft: '38px', paddingRight: '40px' }}
-                placeholder="Enter password"
+                placeholder="Enter admin password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -346,37 +303,15 @@ const Login = () => {
             type="submit"
             className="btn-primary"
             disabled={loading}
-            style={{ width: '100%', padding: '12px', marginTop: '12px', fontSize: '0.95rem' }}
+            style={{ width: '100%', padding: '12px', marginTop: '14px', fontSize: '0.95rem' }}
           >
-            {loading ? 'Authenticating...' : `Sign In as ${activeTab === 'admin' ? 'Admin' : 'Member'}`}
+            {loading ? 'Authenticating Admin...' : 'Sign In to Admin Portal'}
             {!loading && <ArrowRight size={18} />}
           </button>
         </form>
 
-        {/* Sign Up Navigation Option */}
-        <div
-          style={{
-            textAlign: 'center',
-            marginTop: '20px',
-            fontSize: '0.875rem',
-            color: 'var(--text-secondary)',
-          }}
-        >
-          Don't have an account?{' '}
-          <Link
-            to="/signup"
-            style={{
-              color: 'var(--primary)',
-              fontWeight: 700,
-              textDecoration: 'none',
-            }}
-          >
-            Sign Up
-          </Link>
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: '18px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-          Secure Self Help Group Portal • Bachat Gat 2026
+        <div style={{ textAlign: 'center', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
+          Secure Admin Management Portal • Bachat Gat 2026
         </div>
       </div>
     </div>

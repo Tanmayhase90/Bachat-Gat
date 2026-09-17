@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import Modal from '../common/Modal';
 import { memberService } from '../../services/memberService';
+import { groupService } from '../../services/groupService';
+import { useAuth } from '../../context/AuthContext';
 import { formatCurrency } from '../../utils/formatters';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   AlertCircle,
   CheckCircle2,
@@ -14,11 +17,15 @@ import {
 } from 'lucide-react';
 
 const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
+  const { t, language } = useLanguage();
+  const { monthlyContributionPerShare } = useAuth();
+  const currentPerShare = (monthlyContributionPerShare || 1000).toString();
+
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     shares: '1',
-    perShare: '1000',
+    perShare: currentPerShare,
     member_code: '',
   });
 
@@ -26,29 +33,40 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Auto-fetch next member code preview on modal open
+  // Auto-fetch next member code and latest group contribution per share on modal open
   useEffect(() => {
     if (!isOpen) return;
     let active = true;
     setError('');
     setSuccess('');
 
-    memberService.getNextMemberCode()
-      .then((result) => {
-        if (active) setFormData((prev) => ({ ...prev, member_code: result.memberCode }));
-      })
-      .catch(() => {
-        // Graceful fallback
-      });
+    Promise.all([
+      memberService.getNextMemberCode().catch(() => null),
+      groupService.getGroupDetails().catch(() => null),
+    ]).then(([codeResult, groupResult]) => {
+      if (!active) return;
+      const latestCode = codeResult?.memberCode || '';
+      const latestPerShare = groupResult?.group?.monthly_contribution_per_share ??
+        groupResult?.group?.monthlyContributionPerShare ??
+        groupResult?.group?.monthlyContribution ??
+        monthlyContributionPerShare ??
+        1000;
+
+      setFormData((prev) => ({
+        ...prev,
+        ...(latestCode ? { member_code: latestCode } : {}),
+        perShare: latestPerShare.toString(),
+      }));
+    });
 
     return () => {
       active = false;
     };
-  }, [isOpen]);
+  }, [isOpen, monthlyContributionPerShare]);
 
   // Dynamically calculate monthly contribution = shares * perShare
   const numShares = Math.max(1, parseInt(formData.shares, 10) || 1);
-  const numPerShare = Math.max(0, parseFloat(formData.perShare) || 1000);
+  const numPerShare = Math.max(0, parseFloat(formData.perShare) || 0);
   const calculatedMonthlyContribution = numShares * numPerShare;
 
   const handleChange = (e) => {
@@ -63,22 +81,23 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
     setError('');
   };
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
+    const resetPerShare = (monthlyContributionPerShare || 1000).toString();
     setFormData({
       name: '',
       phone: '',
       shares: '1',
-      perShare: '1000',
+      perShare: resetPerShare,
       member_code: '',
     });
     setError('');
     setSuccess('');
-  };
+  }, [monthlyContributionPerShare]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     handleReset();
-    onClose();
-  };
+    onClose?.();
+  }, [handleReset, onClose]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -87,22 +106,22 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
 
     // 1. Validation
     if (!cleanName || cleanName.length < 2) {
-      setError('Please enter a valid member Full Name.');
+      setError(t('modals.enterValidName', 'Please enter a valid member Full Name.'));
       return;
     }
 
-    if (!cleanPhone || cleanPhone.length < 10) {
-      setError('Please enter a valid 10-digit mobile phone number.');
+    if (cleanPhone && cleanPhone.length < 10) {
+      setError(t('modals.enterValidPhone', 'Please enter a valid 10-digit mobile phone number.'));
       return;
     }
 
     if (numShares < 1) {
-      setError('Shares count must be at least 1.');
+      setError(t('modals.sharesCountMin', 'Shares count must be at least 1.'));
       return;
     }
 
     if (numPerShare <= 0) {
-      setError('Per Share amount must be greater than ₹0.');
+      setError(t('modals.perShareMin', 'Per Share amount must be greater than ₹0.'));
       return;
     }
 
@@ -112,8 +131,10 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
 
       // Auto-generate standard credentials for the member
       const cleanDigits = cleanPhone.replace(/\D/g, '');
-      const standardEmail = `${cleanDigits}@bachatgat.local`;
-      const standardPassword = `Pass@${cleanDigits.slice(-4) || '1234'}`;
+      const codeSuffix = (formData.member_code || '').replace(/\D/g, '') || Date.now().toString().slice(-4);
+      const emailPrefix = cleanDigits || (formData.member_code ? formData.member_code.toLowerCase().replace(/[^a-z0-9]/g, '') : `mem_${Date.now()}`);
+      const standardEmail = `${emailPrefix}_${codeSuffix}@bachatgat.local`;
+      const standardPassword = `Pass@${cleanDigits ? cleanDigits.slice(-4) : (codeSuffix.padStart(4, '0').slice(-4) || '1234')}`;
 
       // Call existing member creation service without changing backend/schema
       const res = await memberService.createMember({
@@ -132,7 +153,7 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
       });
 
       if (res.success) {
-        setSuccess(`Member ${res.member?.member_code || formData.member_code || ''} successfully recorded!`);
+        setSuccess(t('modals.memberCreatedSuccess', `Member ${res.member?.member_code || formData.member_code || ''} successfully recorded!`));
         setTimeout(() => {
           handleReset();
           if (onSuccess) onSuccess();
@@ -141,15 +162,66 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
       }
     } catch (err) {
       console.error('Failed to add member:', err);
-      setError(err.response?.data?.message || err.message || 'Failed to record member.');
+      setError(err.response?.data?.message || err.message || t('modals.failedAddMember', 'Failed to record member.'));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleCancel} title="Add Member" maxWidth="480px">
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleCancel}
+      title={t('members.addMemberBtn', 'Add Member')}
+      maxWidth="500px"
+      onSubmit={handleSubmit}
+      footer={
+        <>
+          <button
+            type="button"
+            onClick={handleCancel}
+            disabled={loading}
+            className="btn-secondary"
+            style={{
+              padding: '10px 22px',
+              fontSize: '0.9rem',
+              fontWeight: 600,
+              borderRadius: 'var(--radius-full)',
+            }}
+          >
+            {t('common.cancel', 'Cancel')}
+          </button>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn-primary"
+            style={{
+              padding: '10px 26px',
+              fontSize: '0.9rem',
+              fontWeight: 700,
+              borderRadius: 'var(--radius-full)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              boxShadow: 'var(--shadow-pink)',
+              minWidth: '110px',
+              justifyContent: 'center',
+            }}
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="spin-animation" />
+                <span>{t('common.saving', 'Saving...')}</span>
+              </>
+            ) : (
+              <span>{t('common.record', 'Record')}</span>
+            )}
+          </button>
+        </>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {/* Error Notification */}
         {error && (
           <div
@@ -193,17 +265,17 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
         {/* 1. Full Name */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <User size={15} color="var(--primary)" /> Full Name *
+            <User size={15} color="var(--primary)" /> {t('modals.fullName', 'Full Name *')}
           </label>
           <input
             type="text"
             name="name"
             className="form-input"
-            placeholder="Enter member full name"
+            placeholder={t('modals.namePlaceholder', 'Enter member full name')}
             value={formData.name}
             onChange={handleChange}
             disabled={loading}
-            autoFocus
+            data-autofocus
             required
           />
         </div>
@@ -211,21 +283,20 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
         {/* 2. Phone Number */}
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Phone size={15} color="var(--primary)" /> Phone Number *
+            <Phone size={15} color="var(--primary)" /> {t('modals.phoneLabel', 'Phone Number')}
           </label>
           <input
             type="tel"
             name="phone"
             className="form-input"
-            placeholder="10-digit mobile number"
+            placeholder={t('modals.phonePlaceholder', '10-digit mobile number')}
             value={formData.phone}
             onChange={handlePhoneChange}
             disabled={loading}
             maxLength={10}
-            required
           />
           <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-            Enter 10 digit Indian mobile number (e.g. 9822012345)
+            {t('modals.phoneHint', 'Enter 10 digit Indian mobile number (e.g. 9822012345)')}
           </span>
         </div>
 
@@ -234,7 +305,7 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
           {/* Shares Count */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Layers size={15} color="var(--primary)" /> Shares Count *
+              <Layers size={15} color="var(--primary)" /> {t('modals.sharesCount', 'Shares Count *')}
             </label>
             <input
               type="number"
@@ -252,7 +323,7 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
           {/* Per Share (₹) */}
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label" style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Coins size={15} color="var(--primary)" /> Per Share (₹) *
+              <Coins size={15} color="var(--primary)" /> {t('modals.perShare', 'Per Share (₹) *')}
             </label>
             <input
               type="number"
@@ -298,10 +369,10 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
             </div>
             <div>
               <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Monthly Contribution
+                {t('modals.monthlyContribution', 'Monthly Contribution')}
               </div>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                {numShares} {numShares === 1 ? 'Share' : 'Shares'} × {formatCurrency(numPerShare)}
+                {numShares} {numShares === 1 ? (language === 'mr' ? 'हिस्सा' : 'Share') : (language === 'mr' ? 'हिस्से' : 'Shares')} × {formatCurrency(numPerShare)}
               </div>
             </div>
           </div>
@@ -310,62 +381,7 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
             {formatCurrency(calculatedMonthlyContribution)}
           </div>
         </div>
-
-        {/* Bottom Actions: Cancel & Record */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: '12px',
-            marginTop: '8px',
-            paddingTop: '16px',
-            borderTop: '1px solid var(--border-color)',
-          }}
-        >
-          <button
-            type="button"
-            onClick={handleCancel}
-            disabled={loading}
-            className="btn-secondary"
-            style={{
-              padding: '10px 22px',
-              fontSize: '0.9rem',
-              fontWeight: 600,
-              borderRadius: 'var(--radius-full)',
-            }}
-          >
-            Cancel
-          </button>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="btn-primary"
-            style={{
-              padding: '10px 26px',
-              fontSize: '0.9rem',
-              fontWeight: 700,
-              borderRadius: 'var(--radius-full)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              boxShadow: 'var(--shadow-pink)',
-              minWidth: '110px',
-              justifyContent: 'center',
-            }}
-          >
-            {loading ? (
-              <>
-                <Loader2 size={16} className="spin-animation" />
-                <span>Saving...</span>
-              </>
-            ) : (
-              <span>Record</span>
-            )}
-          </button>
-        </div>
-      </form>
+      </div>
     </Modal>
   );
 };

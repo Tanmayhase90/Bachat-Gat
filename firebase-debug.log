@@ -1,0 +1,25 @@
+[debug] [2026-09-15T13:47:34.880Z] ----------------------------------------------------------------------
+[debug] [2026-09-15T13:47:34.883Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Saideep\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js emulators:exec --only firestore node C:\Users\Saideep\.gemini\antigravity\brain\864b5ab4-d790-4a33-a042-6039a2508468\scratch\verify_edit_member_optional_phone.mjs
+[debug] [2026-09-15T13:47:34.884Z] CLI Version:   15.27.0
+[debug] [2026-09-15T13:47:34.884Z] Platform:      win32
+[debug] [2026-09-15T13:47:34.884Z] Node Version:  v24.12.0
+[debug] [2026-09-15T13:47:34.884Z] Detected Agent: antigravity
+[debug] [2026-09-15T13:47:34.884Z] Time:          Tue Sep 15 2026 19:17:34 GMT+0530 (India Standard Time)
+[debug] [2026-09-15T13:47:34.884Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-15T13:47:57.023Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-15T13:47:57.023Z] > authorizing via signed-in user (hasetanmay90@gmail.com)
+[debug] [2026-09-15T13:47:57.141Z] java version "17.0.9" 2023-10-17 LTS
+Java(TM) SE Runtime Environment (build 17.0.9+11-LTS-201)
+Java HotSpot(TM) 64-Bit Server VM (build 17.0.9+11-LTS-201, mixed mode, sharing)
+
+[debug] [2026-09-15T13:47:57.156Z] Parsed Java major version: 17
+[debug] [2026-09-15T13:47:57.162Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[info] i  emulators: Shutting down emulators. {"metadata":{"emulator":{"name":"hub"},"message":"Shutting down emulators."}}
+[debug] [2026-09-15T13:47:57.164Z] Could not find VSCode notification endpoint: TypeError: fetch failed. If you are not running the Firebase SQL Connect VSCode extension, this is expected and not an issue.
+[debug] [2026-09-15T13:48:02.173Z] Error: Timed out.
+    at Timeout._onTimeout (C:\Users\Saideep\AppData\Roaming\npm\node_modules\firebase-tools\lib\utils.js:296:49)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.

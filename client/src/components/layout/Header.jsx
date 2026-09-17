@@ -1,21 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import NotificationDropdown from '../common/NotificationDropdown';
+import { useLanguage } from '../../context/LanguageContext';
+import LanguageDropdown from '../common/LanguageDropdown';
 import GroupInfoModal from '../common/GroupInfoModal';
 import {
   Menu,
   Building2,
   PiggyBank,
   HandCoins,
+  CreditCard,
   ChevronDown,
   User,
   Settings,
   LogOut,
 } from 'lucide-react';
 
-const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) => {
+const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan, onOpenRecordRepayment }) => {
   const { user, groupName, logout, roleName, canManageSavings, canManageLoans, canManageGroup } = useAuth();
+  const { t, getGroupName } = useLanguage();
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -23,9 +26,9 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
 
   const getGreeting = () => {
     const hours = new Date().getHours();
-    if (hours < 12) return 'Good Morning';
-    if (hours < 17) return 'Good Afternoon';
-    return 'Good Evening';
+    if (hours < 12) return t('common.goodMorning');
+    if (hours < 17) return t('common.goodAfternoon');
+    return t('common.goodEvening');
   };
 
   const getInitials = (name) => {
@@ -53,11 +56,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
 
   const handleNavigateProfile = () => {
     setIsProfileOpen(false);
-    if (user?.memberId) {
-      navigate(`/members/${user.memberId}`);
-    } else {
-      navigate('/settings');
-    }
+    navigate('/settings?tab=profile', { state: { tab: 'profile' } });
   };
 
   const handleNavigateSettings = () => {
@@ -135,23 +134,32 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                 }}
                 title="View Group Information"
               >
-                <Building2 size={12} /> {groupName || user?.groupName || 'Bachat Gat'}
+                <Building2 size={12} /> {getGroupName(groupName || user?.groupName || 'Bachat Gat')}
               </button>
             </div>
           </div>
         </div>
 
-        {/* Right Side: Quick Action buttons + Notification Bell + User Profile */}
+        {/* Right Side: Quick Action buttons + Language Dropdown + Notification Bell + User Profile */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {/* Quick Actions */}
           <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {canManageLoans && onOpenRecordRepayment && (
+              <button
+                onClick={onOpenRecordRepayment}
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+              >
+                <CreditCard size={15} /> {t('header.loanRepayment', 'Loan Repayment')}
+              </button>
+            )}
             {canManageSavings && onOpenRecordSavings && (
               <button
                 onClick={onOpenRecordSavings}
                 className="btn-outline"
                 style={{ fontSize: '0.8rem', padding: '6px 14px' }}
               >
-                <PiggyBank size={15} /> + Savings
+                <PiggyBank size={15} /> {t('header.addSavings')}
               </button>
             )}
             {canManageLoans && onOpenCreateLoan && (
@@ -160,13 +168,13 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                 className="btn-primary"
                 style={{ fontSize: '0.8rem', padding: '7px 14px' }}
               >
-                <HandCoins size={15} /> + Loan
+                <HandCoins size={15} /> {t('header.addLoan')}
               </button>
             )}
           </div>
 
-          {/* Notification Dropdown */}
-          <NotificationDropdown />
+          {/* Language Dropdown */}
+          <LanguageDropdown />
 
           {/* User Profile Section with Dropdown */}
           <div style={{ position: 'relative' }} ref={profileRef}>
@@ -246,7 +254,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                     textTransform: 'uppercase',
                   }}
                 >
-                  {roleName}
+                  {t(`common.roles.${roleName}`, roleName)}
                 </span>
               </div>
 
@@ -289,7 +297,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                   </div>
                   <div style={{ marginTop: '8px' }}>
                     <span className={`badge ${getRoleBadgeClass(roleName)}`} style={{ fontSize: '0.65rem', padding: '2px 8px' }}>
-                      Role: {roleName}
+                      {t(`common.roles.${roleName}`, roleName)}
                     </span>
                   </div>
                 </div>
@@ -297,7 +305,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                 {/* Dropdown Items */}
                 <div style={{ padding: '6px' }}>
                   <button
-                    onClick={handleNavigateProfile}
+                    onClick={handleNavigateSettings}
                     style={{
                       width: '100%',
                       display: 'flex',
@@ -315,34 +323,9 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                     onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-subtle)')}
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <User size={16} color="var(--primary)" />
-                    <span>My Profile</span>
+                    <Settings size={16} color="var(--primary)" />
+                    <span>{t('header.settings')}</span>
                   </button>
-
-                  {canManageGroup && (
-                    <button
-                      onClick={handleNavigateSettings}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '10px',
-                        padding: '10px 12px',
-                        borderRadius: 'var(--radius-md)',
-                        background: 'transparent',
-                        color: 'var(--text-secondary)',
-                        fontSize: '0.875rem',
-                        fontWeight: 600,
-                        textAlign: 'left',
-                        transition: 'var(--transition)',
-                      }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg-subtle)')}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <Settings size={16} color="var(--primary)" />
-                      <span>Settings</span>
-                    </button>
-                  )}
 
                   <div style={{ height: '1px', background: 'var(--border-color)', margin: '4px 0' }} />
 
@@ -366,7 +349,7 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan }) 
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
                     <LogOut size={16} />
-                    <span>Logout</span>
+                    <span>{t('header.logout')}</span>
                   </button>
                 </div>
               </div>

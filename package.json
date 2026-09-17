@@ -9,7 +9,10 @@
     "preview": "cd client && npm run preview",
     "admin:create": "node scripts/create-admin.js",
     "firebase:seed": "node database/seed-firebase.js",
-    "firebase:test-workflow": "node scripts/test-full-workflow.js"
+    "emulator:start": "firebase emulators:start --only firestore",
+    "test:workflow": "node scripts/test-full-workflow.js",
+    "test:sync": "node scripts/test-member-delete-sync.js",
+    "test:license": "node scripts/test-license-backup.cjs"
   },
   "keywords": ["bachat-gat", "microfinance", "react", "firebase", "firestore"],
   "author": "Internship Project",

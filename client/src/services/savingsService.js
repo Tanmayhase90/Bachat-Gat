@@ -9,12 +9,13 @@ import {
   where,
   onSnapshot,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db } from '../config/firebase.js';
 import {
   normalizeSavings,
   normalizeMember,
+  isMonthlySavingPaid,
   DEFAULT_GROUP_ID,
-} from '../utils/formatters';
+} from '../utils/formatters.js';
 
 export const savingsService = {
   /**
@@ -22,7 +23,7 @@ export const savingsService = {
    */
   getAllSavings: async (params = {}, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
 
       const [contributionsSnap, membersSnap] = await Promise.all([
         getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
@@ -92,22 +93,97 @@ export const savingsService = {
    */
   recordSavings: async (data, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
-      const memberId = data.member_id || data.memberId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
+      const memberId = String(data.member_id || data.memberId || '');
       const month = parseInt(data.month, 10);
       const year = parseInt(data.year, 10);
       const amount = parseFloat(data.amount);
       const mode = data.payment_mode || data.paymentMode || 'UPI';
       const notes = data.remarks || data.notes || '';
+      const paymentDate = data.payment_date || data.paymentDate || new Date().toISOString().split('T')[0];
+
+      // Fetch member document to get member name and code
+      let memberName = 'Member';
+      let memberCode = memberId;
+      try {
+        const memSnap = await getDoc(doc(db, 'groups', targetGroupId, 'members', memberId));
+        if (memSnap.exists()) {
+          const mData = memSnap.data();
+          memberName = mData.name || mData.fullName || 'Member';
+          memberCode = mData.memberCode || mData.member_code || memberId;
+        }
+      } catch (e) {
+        // fallback
+      }
+
+      const MONTH_NAMES_EN = [
+        'January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const monthLabel = MONTH_NAMES_EN[month - 1] || `Month ${month}`;
+
+      const candidates = [
+        memberId,
+        memberCode,
+        memberId.replace('-', '_'),
+        memberId.replace('_', '-'),
+      ].filter(Boolean);
 
       const docId = `C_${memberId}_${year}_${String(month).padStart(2, '0')}`;
       const docRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', docId);
-      const existingContribution = await getDoc(docRef);
+      let existingContribution = await getDoc(docRef);
       if (existingContribution.exists()) {
         const existingData = existingContribution.data();
-        const alreadyPaid = Number(existingData.paidAmount || existingData.regularHaftaAmount || 0);
-        if (alreadyPaid > 0) {
-          throw new Error(`Savings for ${month}/${year} are already recorded for this member.`);
+        if (isMonthlySavingPaid(existingData, amount)) {
+          throw new Error(`Saving already recorded for ${monthLabel} ${year} for ${memberName}.`);
+        }
+      }
+
+      // Check all other possible docId formats
+      for (const cand of candidates) {
+        const checkDocId = `C_${cand}_${year}_${String(month).padStart(2, '0')}`;
+        if (checkDocId === docId) continue;
+        const checkRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', checkDocId);
+        const checkSnap = await getDoc(checkRef);
+        if (checkSnap.exists()) {
+          const checkData = checkSnap.data();
+          if (isMonthlySavingPaid(checkData, amount)) {
+            throw new Error(`Saving already recorded for ${monthLabel} ${year} for ${memberName}.`);
+          }
+          if (!existingContribution.exists()) {
+            existingContribution = checkSnap;
+          }
+        }
+      }
+
+      // Also check query across collection in case document ID is formatted differently
+      try {
+        const existingQuerySnap = await getDocs(
+          query(
+            collection(db, 'groups', targetGroupId, 'monthly_contributions'),
+            where('month', '==', month),
+            where('year', '==', year)
+          )
+        );
+
+        if (!existingQuerySnap.empty) {
+          const candidateCleanSet = new Set(candidates.map((c) => String(c).toLowerCase().replace(/[-_]/g, '')));
+          const paidExisting = existingQuerySnap.docs.some((d) => {
+            const dData = d.data();
+            const dMemId = String(dData.memberId || dData.member_id || '').toLowerCase().replace(/[-_]/g, '');
+            const dMemCode = String(dData.memberCode || dData.member_code || '').toLowerCase().replace(/[-_]/g, '');
+            if (candidateCleanSet.has(dMemId) || candidateCleanSet.has(dMemCode)) {
+              return isMonthlySavingPaid(dData, amount);
+            }
+            return false;
+          });
+          if (paidExisting) {
+            throw new Error(`Saving already recorded for ${monthLabel} ${year} for ${memberName}.`);
+          }
+        }
+      } catch (qErr) {
+        if (qErr.message && qErr.message.includes('Saving already recorded')) {
+          throw qErr;
         }
       }
 
@@ -119,6 +195,10 @@ export const savingsService = {
         group_id: targetGroupId,
         memberId,
         member_id: memberId,
+        memberName,
+        member_name: memberName,
+        memberCode,
+        member_code: memberCode,
         month,
         year,
         expectedAmount: amount,
@@ -137,25 +217,33 @@ export const savingsService = {
         interest: 0,
         status: 'PAID',
         status_lower: 'paid',
-        paymentDate: data.payment_date || new Date().toISOString(),
-        payment_date: data.payment_date || new Date().toISOString(),
+        paymentDate: paymentDate,
+        payment_date: paymentDate,
         paymentMode: mode,
         payment_mode: mode,
         notes: notes.trim(),
         remarks: notes.trim(),
-        createdAt: new Date().toISOString(),
+        createdAt: existingContribution.exists() ? (existingContribution.data().createdAt || new Date().toISOString()) : new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
       await setDoc(docRef, contributionPayload, { merge: true });
 
-      // Fetch member name for logging
-      let memberName = 'Member';
+      // Update Member aggregate total savings
       try {
-        const memSnap = await getDoc(doc(db, 'groups', targetGroupId, 'members', memberId));
-        if (memSnap.exists()) memberName = memSnap.data().name || memSnap.data().fullName || 'Member';
+        const memRef = doc(db, 'groups', targetGroupId, 'members', memberId);
+        const memSnap = await getDoc(memRef);
+        if (memSnap.exists()) {
+          const mData = memSnap.data();
+          const currentMemSavings = Number(mData.totalSavings || mData.total_savings || 0);
+          await updateDoc(memRef, {
+            totalSavings: currentMemSavings + amount,
+            total_savings: currentMemSavings + amount,
+            updatedAt: new Date().toISOString(),
+          });
+        }
       } catch (e) {
-        // fallback
+        console.warn('Notice: Member total savings update on savings record:', e);
       }
 
       // Log activity in Flutter activities subcollection
@@ -168,6 +256,8 @@ export const savingsService = {
         memberId,
         memberName,
         referenceId: docId,
+        month: Number(month),
+        year: Number(year),
         date: new Date().toISOString(),
       });
 
@@ -211,7 +301,7 @@ export const savingsService = {
    */
   updateSavings: async (id, data, groupId = DEFAULT_GROUP_ID) => {
     try {
-      const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+      const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const docRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', id);
       const payload = {
         updatedAt: new Date().toISOString(),
@@ -238,7 +328,7 @@ export const savingsService = {
    * Subscribe to real-time savings
    */
   subscribeToSavings: (callback, groupId = DEFAULT_GROUP_ID) => {
-    const targetGroupId = (groupId === 'group_001' || !groupId) ? DEFAULT_GROUP_ID : groupId;
+    const targetGroupId = groupId || DEFAULT_GROUP_ID;
     return onSnapshot(collection(db, 'groups', targetGroupId, 'monthly_contributions'), () => {
       savingsService.getAllSavings({}, targetGroupId).then((res) => {
         if (res.success) callback(res);

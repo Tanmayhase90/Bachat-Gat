@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { useLanguage } from '../../context/LanguageContext';
 import { Building2, Calendar, Target, Users, ShieldCheck, Tag } from 'lucide-react';
 import { groupService } from '../../services/dashboardService';
-import { formatCurrency, formatDate, formatNumber } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatNumber, DEFAULT_GROUP_ID } from '../../utils/formatters';
 
 const GroupInfoModal = ({ isOpen, onClose }) => {
+  const { t, getGroupName } = useLanguage();
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -27,21 +29,36 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
     }
   }, [isOpen]);
 
+  if (!isOpen) return null;
+
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Group Information" maxWidth="500px">
-      {loading ? (
-        <div style={{ padding: '30px', textAlign: 'center' }}>Loading group information...</div>
-      ) : group ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title={t('groupInfo.title', 'Bachat Gat Profile')}
+      maxWidth="520px"
+      footer={
+        <button onClick={onClose} className="btn-secondary">
+          Close
+        </button>
+      }
+    >
+      {loading || !group ? (
+        <div style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          {t('common.loading', 'Loading details...')}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* Header info */}
           <div
             style={{
-              padding: '16px',
-              borderRadius: 'var(--radius-md)',
-              background: 'linear-gradient(135deg, rgba(194, 24, 91, 0.1) 0%, rgba(233, 30, 99, 0.05) 100%)',
-              border: '1px solid rgba(194, 24, 91, 0.2)',
               display: 'flex',
               alignItems: 'center',
               gap: '14px',
+              padding: '16px',
+              background: 'var(--bg-subtle, #F8FAFC)',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color, #E2E8F0)',
             }}
           >
             <div
@@ -62,10 +79,10 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
             </div>
             <div>
               <h3 style={{ fontSize: '1.15rem', color: 'var(--primary)', fontWeight: 700 }}>
-                {group.group_name || group.groupName || 'Chhatrapati Bachat Gat'}
+                {getGroupName(group.group_name || group.groupName)}
               </h3>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Tag size={12} /> ID: <code style={{ fontWeight: 600 }}>{group.group_code || group.groupCode || 'group_001'}</code>
+                <Tag size={12} /> ID: <code style={{ fontWeight: 600 }}>{group.group_code || group.groupCode || DEFAULT_GROUP_ID}</code>
               </div>
             </div>
           </div>
@@ -86,7 +103,7 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 <Target size={14} color="var(--success)" /> MONTHLY TARGET
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                {formatCurrency(group.monthly_target || group.monthlyTarget || 363000)}
+                {formatCurrency(group.monthly_target || group.monthlyTarget || ((group.total_active_members || group.totalActiveMembers || 0) * (group.monthly_contribution_per_share || group.monthlyContribution || 1000)) || 0)}
               </div>
               <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>group goal</span>
             </div>
@@ -117,14 +134,8 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
               <strong>Description:</strong> {group.description}
             </div>
           )}
-
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '8px' }}>
-            <button onClick={onClose} className="btn-secondary">
-              Close
-            </button>
-          </div>
         </div>
-      ) : null}
+      )}
     </Modal>
   );
 };

@@ -1,4 +1,4 @@
-const crypto = require('crypto');
+import crypto from 'crypto';
 
 function getSecret() {
   return process.env.LICENSE_SIGNING_SECRET || '';
@@ -65,7 +65,7 @@ function verifyKey(machineId, key) {
   };
 }
 
-module.exports = async (req, res) => {
+export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');

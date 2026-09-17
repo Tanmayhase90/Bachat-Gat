@@ -524,20 +524,14 @@ export const memberService = {
         uid: createdAuthUser.uid,
         fullName: cleanName,
         name: cleanName,
-        full_name: cleanName,
         email: cleanEmail,
         phone: cleanPhone,
-        phone_number: cleanPhone,
         role: requestedRole.toLowerCase(),
         role_name: requestedRole,
         isActive: true,
-        is_active: true,
         memberId: newMemberId,
-        member_id: newMemberId,
         memberCode: newMemberPayload.memberCode,
-        member_code: newMemberPayload.memberCode,
         groupId: targetGroupId,
-        group_id: targetGroupId,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
@@ -667,11 +661,9 @@ export const memberService = {
         if (payload.name) {
           userUpdate.name = payload.name;
           userUpdate.fullName = payload.fullName;
-          userUpdate.full_name = payload.full_name;
         }
         if (payload.phone !== undefined) {
           userUpdate.phone = payload.phone;
-          userUpdate.phone_number = payload.phone_number;
         }
         if (payload.email) {
           userUpdate.email = payload.email;
@@ -682,7 +674,6 @@ export const memberService = {
         }
         if (payload.status) {
           userUpdate.isActive = payload.isActive;
-          userUpdate.is_active = payload.is_active;
         }
         await setDoc(doc(db, 'users', linkedUid), userUpdate, { merge: true });
       }

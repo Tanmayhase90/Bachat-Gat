@@ -7,7 +7,7 @@ import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import AddMemberModal from '../components/forms/AddMemberModal';
 import RecordSavingsModal from '../components/forms/RecordSavingsModal';
-import { formatCurrency, formatDate, formatNumber, formatMonthYear, formatMonthlyHaftaDueDate } from '../utils/formatters';
+import { formatCurrency, formatDate, formatNumber, formatMonthYear, formatMonthlyHaftaDueDate, compareMemberNumericOrder } from '../utils/formatters';
 import {
   Users,
   Search,
@@ -127,16 +127,7 @@ const Members = () => {
         const memberList = (res.members || []).filter(
           (m) => (m.role || '').toLowerCase() !== 'admin'
         );
-        memberList.sort((a, b) => {
-          const aId = a.memberId || a.member_id || a.memberCode || a.member_code || a.id || '';
-          const bId = b.memberId || b.member_id || b.memberCode || b.member_code || b.id || '';
-          const aNum = parseInt(String(aId).replace(/\D/g, ''), 10);
-          const bNum = parseInt(String(bId).replace(/\D/g, ''), 10);
-          if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-          if (!isNaN(aNum)) return -1;
-          if (!isNaN(bNum)) return 1;
-          return String(aId).localeCompare(String(bId), undefined, { numeric: true, sensitivity: 'base' });
-        });
+        memberList.sort(compareMemberNumericOrder);
         setMembers(memberList);
 
         const total = memberList.length;
@@ -185,17 +176,8 @@ const Members = () => {
     return name.includes(searchLower) || code.includes(searchLower) || phone.includes(searchLower);
   });
 
-  // Sort all members by Member ID in ascending numerical order before displaying them (e.g. M_1, M_2 ... M_9, M_10 ... M_99, M_100 ... M_364)
-  const sortedMembers = [...filteredMembers].sort((a, b) => {
-    const aId = a.memberId || a.member_id || a.memberCode || a.member_code || a.id || '';
-    const bId = b.memberId || b.member_id || b.memberCode || b.member_code || b.id || '';
-    const aNum = parseInt(String(aId).replace(/\D/g, ''), 10);
-    const bNum = parseInt(String(bId).replace(/\D/g, ''), 10);
-    if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
-    if (!isNaN(aNum)) return -1;
-    if (!isNaN(bNum)) return 1;
-    return String(aId).localeCompare(String(bId), undefined, { numeric: true, sensitivity: 'base' });
-  });
+  // Sort all members by Member ID in ascending numerical order before displaying them (e.g. M_1, M_2 ... M_9, M_10 ... M_99, M_100 ... M_365)
+  const sortedMembers = [...filteredMembers].sort(compareMemberNumericOrder);
 
   const getRoleBadge = (role) => {
     const roleKey = (role || 'MEMBER').toUpperCase();

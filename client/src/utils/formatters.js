@@ -7,6 +7,24 @@
 export const DEFAULT_GROUP_ID = 'chhatrapati_group_001';
 
 /**
+ * Canonical natural numeric ascending sort comparator for Bachat Gat members.
+ * Extracts the numeric integer component from memberId, member_id, memberCode, or id:
+ * M_1 -> 1, M_2 -> 2 ... M_9 -> 9, M_10 -> 10, M_11 -> 11 ... M_99 -> 99, M_100 -> 100 ... M_365 -> 365, M_366 -> 366.
+ */
+export const compareMemberNumericOrder = (a, b) => {
+  const idA = a?.memberId || a?.member_id || a?.memberCode || a?.member_code || a?.id || '';
+  const idB = b?.memberId || b?.member_id || b?.memberCode || b?.member_code || b?.id || '';
+  const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
+  const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
+  if (!isNaN(numA) && !isNaN(numB) && numA !== numB) {
+    return numA - numB;
+  }
+  if (!isNaN(numA) && isNaN(numB)) return -1;
+  if (isNaN(numA) && !isNaN(numB)) return 1;
+  return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
+};
+
+/**
  * Format any number or numeric string safely into Indian numbering system (e.g. 1,50,000)
  */
 export const formatNumber = (value) => {

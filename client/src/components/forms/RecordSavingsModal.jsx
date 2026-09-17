@@ -3,7 +3,7 @@ import Modal from '../common/Modal';
 import { memberService } from '../../services/memberService';
 import { savingsService } from '../../services/savingsService';
 import { groupService } from '../../services/groupService';
-import { formatCurrency, formatMonthYear, formatMonthlyHaftaDueDate } from '../../utils/formatters';
+import { formatCurrency, formatMonthYear, formatMonthlyHaftaDueDate, compareMemberNumericOrder } from '../../utils/formatters';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
 import { CheckCircle2, AlertCircle, PiggyBank, Search, ChevronDown, X, Lock, Clock, Check } from 'lucide-react';
@@ -143,7 +143,7 @@ const RecordSavingsModal = ({
   // Derive pending members strictly for the selected Month & Year in numeric ascending order
   const pendingMembers = allMembers
     .filter(isMemberPending)
-    .sort(compareMemberCodes);
+    .sort(compareMemberNumericOrder);
 
   // Selected member resolved against all active members
   const selectedMember = allMembers.find(

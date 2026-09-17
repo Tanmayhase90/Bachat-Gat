@@ -11,6 +11,7 @@ import {
   normalizeLoan,
   normalizeMember,
   isRegularMember,
+  compareMemberNumericOrder,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters';
 
@@ -53,17 +54,8 @@ export const reportService = {
         return mem.isActive !== false && s === 'ACTIVE';
       });
 
-      // Sort members in ascending numerical order by Member ID / Member Code (e.g. M-1, M-2 ... M-10 ... M-364)
-      activeMembers.sort((a, b) => {
-        const idA = a.memberCode || a.member_code || a.memberId || a.member_id || a.id || '';
-        const idB = b.memberCode || b.member_code || b.memberId || b.member_id || b.id || '';
-        const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
-        const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        if (!isNaN(numA)) return -1;
-        if (!isNaN(numB)) return 1;
-        return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // Sort members in ascending numerical order by Member ID / Member Code (e.g. M_1, M_2 ... M_10 ... M_365)
+      activeMembers.sort(compareMemberNumericOrder);
 
       // Dynamically auto-calculate monthly target from active members (Total Member Shares * Monthly Contribution Per Share)
       const monthlyTarget = activeMembers.reduce(
@@ -410,17 +402,8 @@ export const reportService = {
         );
       }
 
-      // Sort pending in ascending numerical order by Member ID / Member Code (e.g. M-1, M-2 ... M-9, M-10 ... M-364)
-      pending.sort((a, b) => {
-        const idA = a.memberCode || a.member_code || a.memberId || a.member_id || a.id || '';
-        const idB = b.memberCode || b.member_code || b.memberId || b.member_id || b.id || '';
-        const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
-        const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        if (!isNaN(numA)) return -1;
-        if (!isNaN(numB)) return 1;
-        return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // Sort pending in ascending numerical order by Member ID / Member Code (e.g. M_1, M_2 ... M_9, M_10 ... M_365)
+      pending.sort(compareMemberNumericOrder);
 
       const totalPendingAmount = pending.reduce((acc, p) => acc + (p.totalPending || 0), 0);
 

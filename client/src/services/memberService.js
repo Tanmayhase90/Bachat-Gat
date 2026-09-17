@@ -31,6 +31,7 @@ import {
   normalizeLoan,
   calculateMonthlyMemberStatus,
   isRegularMember,
+  compareMemberNumericOrder,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
 import { groupService } from './groupService.js';
@@ -225,17 +226,8 @@ export const memberService = {
         );
       }
 
-      // Sort by member ID in ascending numerical order (e.g. M_1, M_2 ... M_9, M_10 ... M_99, M_100 ... M_364)
-      filtered.sort((a, b) => {
-        const idA = a.memberId || a.member_id || a.memberCode || a.member_code || a.id || '';
-        const idB = b.memberId || b.member_id || b.memberCode || b.member_code || b.id || '';
-        const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
-        const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
-        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-        if (!isNaN(numA)) return -1;
-        if (!isNaN(numB)) return 1;
-        return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
-      });
+      // Sort by member ID in natural ascending numerical order (e.g. M_1, M_2 ... M_9, M_10 ... M_99, M_100 ... M_365)
+      filtered.sort(compareMemberNumericOrder);
 
       const pendingMembersCount = filtered.filter((m) => m.isPendingDues).length;
       const paidMembersCount = filtered.filter((m) => m.hasPaidCurrentMonth).length;

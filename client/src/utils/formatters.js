@@ -242,7 +242,6 @@ export const normalizeMember = (id, data = {}) => {
     joined_date: data.joinDate || data.joinedAt || data.joined_date || '',
     memberCode: data.memberCode || data.member_code || memberId,
     member_code: data.memberCode || data.member_code || memberId,
-    email: data.email || '',
     userId: data.userId || data.authUid || data.firebaseUid || '',
     authUid: data.authUid || data.firebaseUid || data.userId || '',
     firebaseUid: data.firebaseUid || data.authUid || data.userId || '',

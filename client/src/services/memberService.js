@@ -13,18 +13,7 @@ import {
   onSnapshot,
   writeBatch,
 } from 'firebase/firestore';
-import { initializeApp, deleteApp } from 'firebase/app';
-import {
-  createUserWithEmailAndPassword,
-  deleteUser,
-  getAuth,
-  inMemoryPersistence,
-  setPersistence,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-} from 'firebase/auth';
-import { db, firebaseConfig } from '../config/firebase.js';
+import { db } from '../config/firebase.js';
 import {
   normalizeMember,
   normalizeSavings,
@@ -290,7 +279,6 @@ export const memberService = {
         filtered = filtered.filter(
           (m) =>
             m.name.toLowerCase().includes(s) ||
-            m.email.toLowerCase().includes(s) ||
             m.phone.includes(s) ||
             m.memberCode.toLowerCase().includes(s) ||
             m.id.toLowerCase().includes(s)
@@ -341,8 +329,7 @@ export const memberService = {
               d.id === memberId ||
               data.userId === memberId ||
               data.authUid === memberId ||
-              data.firebaseUid === memberId ||
-              (data.email && data.email.toLowerCase() === memberId.toLowerCase())
+              data.firebaseUid === memberId
             );
           });
 
@@ -480,7 +467,6 @@ export const memberService = {
     try {
       const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const cleanName = (memberData.name || memberData.fullName || '').trim();
-      const cleanEmail = (memberData.email || '').trim().toLowerCase();
       const cleanPhone = (memberData.phone || '').trim();
       const normalizedName = cleanName.toLowerCase().replace(/\s+/g, ' ');
       const requestedRole = (memberData.role_name || 'MEMBER').trim().toUpperCase();
@@ -503,17 +489,11 @@ export const memberService = {
       const duplicateMember = membersSnap.docs.find((memberDoc) => {
         const data = memberDoc.data();
         const existingName = (data.name || data.fullName || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        const existingEmail = (data.email || '').trim().toLowerCase();
-        return (cleanEmail && existingEmail === cleanEmail) ||
-          (normalizedName && existingName === normalizedName);
+        return normalizedName && existingName === normalizedName;
       });
       if (duplicateMember) {
         const existing = duplicateMember.data();
-        const existingEmail = (existing.email || '').trim().toLowerCase();
-        const duplicateField = (cleanEmail && existingEmail === cleanEmail)
-          ? 'email address'
-          : 'name';
-        throw new Error(`Duplicate member not added. This ${duplicateField} already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
+        throw new Error(`Duplicate member not added. This name already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
       }
       const existingNums = new Set();
       membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((d) => {
@@ -540,7 +520,6 @@ export const memberService = {
         name: cleanName,
         fullName: cleanName,
         phone: cleanPhone,
-        email: cleanEmail,
         userId: null,
         authUid: null,
         firebaseUid: null,
@@ -641,9 +620,6 @@ export const memberService = {
         payload.phoneNumber = p;
         payload.phone_number = p;
       }
-      if (updateData.email !== undefined) {
-        payload.email = updateData.email.trim().toLowerCase();
-      }
       if (updateData.shares !== undefined || updateData.shareCount !== undefined) {
         const sh = parseInt(updateData.shares || updateData.shareCount, 10) || 1;
         payload.shares = sh;
@@ -691,9 +667,6 @@ export const memberService = {
         if (payload.phone !== undefined) {
           userUpdate.phone = payload.phone;
         }
-        if (payload.email) {
-          userUpdate.email = payload.email;
-        }
         if (payload.role) {
           userUpdate.role = payload.role;
           userUpdate.role_name = payload.role_name;
@@ -728,124 +701,10 @@ export const memberService = {
   },
 
   /**
-   * Create or verify a Firebase Auth account and link it to an existing member.
+   * Regular members do NOT have email or login credentials.
    */
-  assignMemberLogin: async (memberId, { email, password }, groupId = DEFAULT_GROUP_ID) => {
-    let secondaryApp = null;
-    let accountUser = null;
-    let createdNewAccount = false;
-
-    try {
-      const targetGroupId = groupId || DEFAULT_GROUP_ID;
-      const cleanEmail = (email || '').trim().toLowerCase();
-      if (!cleanEmail || !/^\S+@\S+\.\S+$/.test(cleanEmail)) {
-        throw new Error('Please enter a valid member email address.');
-      }
-      if (!password || password.length < 6) {
-        throw new Error('Password must be at least 6 characters.');
-      }
-
-      const memberRef = doc(db, 'groups', targetGroupId, 'members', memberId);
-      const memberSnap = await getDoc(memberRef);
-      if (!memberSnap.exists()) throw new Error('Member record not found.');
-
-      const memberData = memberSnap.data();
-      if (memberData.authUid || memberData.userId || memberData.firebaseUid) {
-        throw new Error('Login is already enabled for this member.');
-      }
-
-      const membersSnap = await getDocs(collection(db, 'groups', targetGroupId, 'members'));
-      const emailOwner = membersSnap.docs.find((memberDoc) => {
-        if (memberDoc.id === memberId) return false;
-        return (memberDoc.data().email || '').trim().toLowerCase() === cleanEmail &&
-          Boolean(memberDoc.data().authUid || memberDoc.data().userId || memberDoc.data().firebaseUid);
-      });
-      if (emailOwner) throw new Error('This email is already linked to another member.');
-
-      secondaryApp = initializeApp(firebaseConfig, `existing-member-login-${Date.now()}`);
-      const memberAuth = getAuth(secondaryApp);
-      await setPersistence(memberAuth, inMemoryPersistence);
-
-      try {
-        const credential = await createUserWithEmailAndPassword(memberAuth, cleanEmail, password);
-        accountUser = credential.user;
-        createdNewAccount = true;
-      } catch (authError) {
-        if (authError.code !== 'auth/email-already-in-use') throw authError;
-        const credential = await signInWithEmailAndPassword(memberAuth, cleanEmail, password);
-        accountUser = credential.user;
-      }
-
-      const existingUserSnap = await getDoc(doc(db, 'users', accountUser.uid));
-      if (existingUserSnap.exists()) {
-        const existingProfile = existingUserSnap.data();
-        if (existingProfile.role === 'admin') {
-          throw new Error('An admin account cannot be assigned to a member.');
-        }
-        if (existingProfile.memberId && existingProfile.memberId !== memberId) {
-          throw new Error('This login account is already assigned to another member.');
-        }
-      }
-
-      const memberName = memberData.fullName || memberData.name || 'Member';
-      const role = (memberData.role || memberData.role_name || 'member').toLowerCase();
-      const roleName = role.toUpperCase();
-      const memberCode = memberData.memberCode || memberData.member_code || memberId;
-      const batch = writeBatch(db);
-
-      batch.set(memberRef, {
-        email: cleanEmail,
-        userId: accountUser.uid,
-        authUid: accountUser.uid,
-        firebaseUid: accountUser.uid,
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-      batch.set(doc(db, 'users', accountUser.uid), {
-        uid: accountUser.uid,
-        fullName: memberName,
-        name: memberName,
-        email: cleanEmail,
-        phone: memberData.phone || '',
-        role,
-        role_name: roleName,
-        isActive: memberData.isActive !== false && (memberData.status || 'active').toLowerCase() !== 'inactive',
-        memberId,
-        memberCode,
-        groupId: targetGroupId,
-        createdAt: existingUserSnap.exists() ? existingUserSnap.data().createdAt || serverTimestamp() : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      }, { merge: true });
-      const activityId = `ACT_${Date.now()}_login`;
-      batch.set(doc(db, 'groups', targetGroupId, 'activities', activityId), {
-        id: activityId,
-        type: 'member_login_assigned',
-        memberId,
-        memberName,
-        referenceId: accountUser.uid,
-        description: `Login enabled for ${memberName}`,
-        date: new Date().toISOString(),
-      });
-      await batch.commit();
-
-      return {
-        success: true,
-        message: 'Member login enabled successfully.',
-        email: cleanEmail,
-        createdNewAccount,
-      };
-    } catch (err) {
-      if (createdNewAccount && accountUser) await deleteUser(accountUser).catch(() => {});
-      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
-        throw new Error('This email already exists, but the password is incorrect.');
-      }
-      throw new Error(err.message || 'Failed to enable member login.');
-    } finally {
-      if (secondaryApp) {
-        const secondaryAuth = getAuth(secondaryApp);
-        if (secondaryAuth.currentUser) await signOut(secondaryAuth).catch(() => {});
-        await deleteApp(secondaryApp).catch(() => {});
-      }
-    }
+  assignMemberLogin: async () => {
+    throw new Error('Regular members do not use email login accounts. Admins manage the group directly.');
   },
 
   /**

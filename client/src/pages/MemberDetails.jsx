@@ -20,7 +20,6 @@ import {
   ArrowLeft,
   User,
   Phone,
-  Mail,
   Calendar,
   PiggyBank,
   HandCoins,
@@ -239,9 +238,6 @@ const MemberDetails = () => {
             <div style={{ display: 'flex', gap: '16px', marginTop: '8px', flexWrap: 'wrap', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <ShieldCheck size={15} color="var(--primary)" /> <code>{member.member_code}</code>
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Mail size={15} /> {member.email}
               </span>
               {member.phone && (
                 <>

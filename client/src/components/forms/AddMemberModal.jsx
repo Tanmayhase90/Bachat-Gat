@@ -134,7 +134,6 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
         name: cleanName,
         fullName: cleanName,
         phone: cleanPhone,
-        email: '',
         shares: numShares,
         shareCount: numShares,
         monthlyContribution: calculatedMonthlyContribution,

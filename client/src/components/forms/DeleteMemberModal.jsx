@@ -23,6 +23,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [balanceData, setBalanceData] = useState(null);
+  const [showSecondConfirm, setShowSecondConfirm] = useState(false);
 
   const fetchBalance = async () => {
     if (!member?.id && !member?.member_id) return;
@@ -44,11 +45,13 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     if (isOpen && member) {
       setError('');
       setSuccessMsg('');
+      setShowSecondConfirm(false);
       fetchBalance();
     } else {
       setBalanceData(null);
       setError('');
       setSuccessMsg('');
+      setShowSecondConfirm(false);
     }
   }, [isOpen, member]);
 
@@ -101,8 +104,19 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     }
   };
 
-  const handleConfirmDelete = async () => {
+  const handleOpenSecondConfirm = () => {
     if (!balanceData?.isClear) {
+      setError('Cannot delete member: Outstanding dues must be settled first.');
+      return;
+    }
+    setError('');
+    setShowSecondConfirm(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (deleting) return;
+    if (!balanceData?.isClear) {
+      setShowSecondConfirm(false);
       setError('Cannot delete member: Outstanding dues must be settled first.');
       return;
     }
@@ -112,6 +126,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
       setError('');
       const res = await memberService.deleteMember(memberId);
       if (res.success) {
+        setShowSecondConfirm(false);
         if (onSuccess) {
           onSuccess(memberId);
         }
@@ -120,6 +135,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     } catch (err) {
       console.error('Failed to delete member:', err);
       setError(err.message || 'Failed to delete member.');
+      setShowSecondConfirm(false);
     } finally {
       setDeleting(false);
     }
@@ -131,7 +147,8 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
   const memberCode = member?.memberCode || member?.member_code || member?.id;
 
   return (
-    <Modal
+    <>
+      <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Delete Member Account"
@@ -180,7 +197,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
             <button
               type="button"
               className="btn btn-danger"
-              onClick={handleConfirmDelete}
+              onClick={handleOpenSecondConfirm}
               disabled={deleting}
               style={{
                 display: 'inline-flex',
@@ -189,19 +206,15 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                 padding: '10px 18px',
                 fontSize: '0.875rem',
                 fontWeight: 600,
+                backgroundColor: '#DC2626',
+                color: '#FFFFFF',
+                border: '1px solid #DC2626',
+                borderRadius: '8px',
+                cursor: deleting ? 'not-allowed' : 'pointer',
               }}
             >
-              {deleting ? (
-                <>
-                  <Loader2 className="spinner" size={16} />
-                  <span>Deleting Member Permanently...</span>
-                </>
-              ) : (
-                <>
-                  <Trash2 size={16} />
-                  <span>Confirm & Delete Member Permanently</span>
-                </>
-              )}
+              <Trash2 size={16} />
+              <span>Confirm & Delete Member Permanently</span>
             </button>
           )}
         </>
@@ -495,6 +508,79 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
         ) : null}
       </div>
     </Modal>
+
+    {/* Second Confirmation Popup */}
+    <Modal
+      isOpen={showSecondConfirm}
+      onClose={() => !deleting && setShowSecondConfirm(false)}
+      title="Confirm Permanent Deletion"
+      maxWidth="440px"
+      overlayStyle={{ zIndex: 1100 }}
+      footer={
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={() => setShowSecondConfirm(false)}
+            disabled={deleting}
+            style={{ padding: '8px 16px', fontSize: '0.875rem' }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={handleConfirmDelete}
+            disabled={deleting}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 18px',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              backgroundColor: '#DC2626',
+              color: '#FFFFFF',
+              border: '1px solid #DC2626',
+              borderRadius: '8px',
+              cursor: deleting ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {deleting ? (
+              <>
+                <Loader2 className="spinner" size={16} />
+                <span>Deleting...</span>
+              </>
+            ) : (
+              <>
+                <Trash2 size={16} />
+                <span>Confirm Delete</span>
+              </>
+            )}
+          </button>
+        </div>
+      }
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
+        <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
+          Are you sure you want to delete this member permanently?
+        </p>
+        <div
+          style={{
+            padding: '10px 14px',
+            borderRadius: '8px',
+            backgroundColor: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            fontSize: '0.825rem',
+            color: '#DC2626',
+            lineHeight: 1.4,
+          }}
+        >
+          <strong>{memberName}</strong> ({memberCode}) will be permanently removed. This action cannot be undone.
+        </div>
+      </div>
+    </Modal>
+  </>
   );
 };
 

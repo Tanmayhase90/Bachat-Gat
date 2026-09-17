@@ -1,6 +1,6 @@
 {
-  "installCommand": "npm install --prefix client",
-  "buildCommand": "npm run build --prefix client",
+  "installCommand": "rm -rf client/node_modules && npm install --prefix client",
+  "buildCommand": "chmod -R +x client/node_modules/.bin && npm run build --prefix client",
   "outputDirectory": "client/dist",
   "rewrites": [
     {

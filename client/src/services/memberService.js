@@ -414,20 +414,17 @@ export const memberService = {
    * Register or add new member in Firestore
    */
   createMember: async (memberData, groupId = DEFAULT_GROUP_ID) => {
-    let secondaryApp = null;
-    let createdAuthUser = null;
     try {
       const targetGroupId = groupId || DEFAULT_GROUP_ID;
       const cleanName = (memberData.name || memberData.fullName || '').trim();
       const cleanEmail = (memberData.email || '').trim().toLowerCase();
       const cleanPhone = (memberData.phone || '').trim();
       const normalizedName = cleanName.toLowerCase().replace(/\s+/g, ' ');
-      const password = memberData.password || '';
       const requestedRole = (memberData.role_name || 'MEMBER').trim().toUpperCase();
       const allowedRoles = ['MEMBER', 'TREASURER', 'SECRETARY'];
 
-      if (!cleanName || !cleanEmail || password.length < 6) {
-        throw new Error('Name, email, and a password of at least 6 characters are required.');
+      if (!cleanName) {
+        throw new Error('Member name is required.');
       }
       if (!allowedRoles.includes(requestedRole)) {
         throw new Error('Only Member, Treasurer, or Secretary roles can be assigned here.');
@@ -444,13 +441,13 @@ export const memberService = {
         const data = memberDoc.data();
         const existingName = (data.name || data.fullName || '').trim().toLowerCase().replace(/\s+/g, ' ');
         const existingEmail = (data.email || '').trim().toLowerCase();
-        return existingEmail === cleanEmail ||
+        return (cleanEmail && existingEmail === cleanEmail) ||
           (normalizedName && existingName === normalizedName);
       });
       if (duplicateMember) {
         const existing = duplicateMember.data();
         const existingEmail = (existing.email || '').trim().toLowerCase();
-        const duplicateField = existingEmail === cleanEmail
+        const duplicateField = (cleanEmail && existingEmail === cleanEmail)
           ? 'email address'
           : 'name';
         throw new Error(`Duplicate member not added. This ${duplicateField} already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
@@ -468,15 +465,6 @@ export const memberService = {
       const newMemberId = `M_${nextNumber}`;
       const newMemberCode = `M-${nextNumber}`;
 
-      // A secondary Auth instance creates the member account without replacing
-      // the currently signed-in admin session.
-      secondaryApp = initializeApp(firebaseConfig, `member-account-${Date.now()}`);
-      const memberAuth = getAuth(secondaryApp);
-      await setPersistence(memberAuth, inMemoryPersistence);
-      const credential = await createUserWithEmailAndPassword(memberAuth, cleanEmail, password);
-      createdAuthUser = credential.user;
-      await updateProfile(createdAuthUser, { displayName: cleanName });
-
       const totalMonthlyContribution = parseFloat(memberData.monthly_contribution || memberData.monthlyContribution) || 1000;
       const numShares = parseInt(memberData.shares, 10) || 1;
       const contributionPerShare = parseFloat(memberData.monthlyContributionPerShare || memberData.monthly_contribution_per_share) || (totalMonthlyContribution / numShares);
@@ -487,9 +475,9 @@ export const memberService = {
         fullName: cleanName,
         phone: cleanPhone,
         email: cleanEmail,
-        userId: createdAuthUser.uid,
-        authUid: createdAuthUser.uid,
-        firebaseUid: createdAuthUser.uid,
+        userId: null,
+        authUid: null,
+        firebaseUid: null,
         groupId: targetGroupId,
         memberCode: newMemberCode,
         member_code: newMemberCode,
@@ -520,21 +508,6 @@ export const memberService = {
         updatedAt: serverTimestamp(),
       }, { merge: true });
       batch.set(doc(db, 'groups', targetGroupId, 'members', newMemberId), newMemberPayload);
-      batch.set(doc(db, 'users', createdAuthUser.uid), {
-        uid: createdAuthUser.uid,
-        fullName: cleanName,
-        name: cleanName,
-        email: cleanEmail,
-        phone: cleanPhone,
-        role: requestedRole.toLowerCase(),
-        role_name: requestedRole,
-        isActive: true,
-        memberId: newMemberId,
-        memberCode: newMemberPayload.memberCode,
-        groupId: targetGroupId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
       batch.set(doc(db, 'groups', targetGroupId, 'activities', actId), {
         id: actId,
         type: 'adjustment',
@@ -571,23 +544,10 @@ export const memberService = {
         success: true,
         message: 'Member registered successfully in Bachat Gat',
         member: normalizeMember(newMemberId, newMemberPayload),
-        credentials: { email: cleanEmail },
       };
     } catch (err) {
       console.error('Failed to create member:', err);
-      if (createdAuthUser) {
-        await deleteUser(createdAuthUser).catch(() => {});
-      }
-      if (err.code === 'auth/email-already-in-use') {
-        throw new Error('This email already has a login account. Use a different email.');
-      }
       throw new Error(err.message || 'Failed to create member.');
-    } finally {
-      if (secondaryApp) {
-        const secondaryAuth = getAuth(secondaryApp);
-        if (secondaryAuth.currentUser) await signOut(secondaryAuth).catch(() => {});
-        await deleteApp(secondaryApp).catch(() => {});
-      }
     }
   },
 

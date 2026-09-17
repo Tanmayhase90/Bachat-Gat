@@ -129,20 +129,12 @@ const AddMemberModal = ({ isOpen, onClose, onSuccess }) => {
       setLoading(true);
       setError('');
 
-      // Auto-generate standard credentials for the member
-      const cleanDigits = cleanPhone.replace(/\D/g, '');
-      const codeSuffix = (formData.member_code || '').replace(/\D/g, '') || Date.now().toString().slice(-4);
-      const emailPrefix = cleanDigits || (formData.member_code ? formData.member_code.toLowerCase().replace(/[^a-z0-9]/g, '') : `mem_${Date.now()}`);
-      const standardEmail = `${emailPrefix}_${codeSuffix}@bachatgat.local`;
-      const standardPassword = `Pass@${cleanDigits ? cleanDigits.slice(-4) : (codeSuffix.padStart(4, '0').slice(-4) || '1234')}`;
-
-      // Call existing member creation service without changing backend/schema
+      // Call member creation service to save regular member in groups/{groupId}/members
       const res = await memberService.createMember({
         name: cleanName,
         fullName: cleanName,
         phone: cleanPhone,
-        email: standardEmail,
-        password: standardPassword,
+        email: '',
         shares: numShares,
         shareCount: numShares,
         monthlyContribution: calculatedMonthlyContribution,

@@ -10,7 +10,7 @@ import {
   serverTimestamp,
   onSnapshot,
 } from 'firebase/firestore';
-import { db, auth } from '../config/firebase';
+import { db, auth } from '../config/firebase.js';
 
 export const notificationService = {
   /**

@@ -28,9 +28,18 @@ export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_I
   ]);
 
   const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
-  const totalSavings = allSavings
+  const grossSavings = allSavings
     .filter((c) => c.isPaid || c.paidAmount > 0)
     .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
+
+  const totalSettledSavings = settlementsSnap.docs.reduce((sum, d) => {
+    const data = d.data() || {};
+    const st = (data.status || '').toUpperCase();
+    if (st && st !== 'COMPLETED') return sum;
+    return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
+  }, 0);
+
+  const totalSavings = Math.max(0, grossSavings - totalSettledSavings);
 
   const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const repaymentsByLoan = {};
@@ -71,7 +80,12 @@ export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_I
   allLoansInterest += orphanRepaymentsInterest;
 
   const allContributionsInterest = allSavings.reduce((sum, c) => sum + (c.interestAmount || c.interest || 0), 0);
-  const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
+  const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => {
+    const data = d.data() || {};
+    const st = (data.status || '').toUpperCase();
+    if (st && st !== 'COMPLETED') return sum;
+    return sum + Number(data.interestShare || data.interest_share || 0);
+  }, 0);
 
   const totalInterest = Math.max(0, Math.round((allContributionsInterest + allLoansInterest - totalSettledInterest) * 100) / 100);
   const totalGroupFund = totalSavings + totalInterest;

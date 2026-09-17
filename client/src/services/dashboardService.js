@@ -103,8 +103,15 @@ export const dashboardService = {
         .filter((c) => c.isPaid || c.paidAmount > 0)
         .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
 
-      const memberContributions = liveSavingsTotal;
-      const totalSavings = memberContributions;
+      const totalSettledSavings = settlementsSnap.docs.reduce((sum, d) => {
+        const data = d.data() || {};
+        const st = (data.status || '').toUpperCase();
+        if (st && st !== 'COMPLETED') return sum;
+        return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
+      }, 0);
+
+      const totalSavings = Math.max(0, liveSavingsTotal - totalSettledSavings);
+      const memberContributions = totalSavings;
 
       // 2. Map Repayments by Loan ID
       const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -154,7 +161,12 @@ export const dashboardService = {
 
       interestFromLoans += orphanRepaymentsInterest;
 
-      const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
+      const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => {
+        const data = d.data() || {};
+        const st = (data.status || '').toUpperCase();
+        if (st && st !== 'COMPLETED') return sum;
+        return sum + Number(data.interestShare || data.interest_share || 0);
+      }, 0);
       const calculatedInterest = Math.max(0, Math.round((interestFromContributions + interestFromLoans - totalSettledInterest) * 100) / 100);
       const totalInterest = calculatedInterest;
 
@@ -535,6 +547,8 @@ export const dashboardService = {
     const unsubRepay = onSnapshot(collection(db, 'groups', targetGroupId, 'repayments'), triggerUpdate, (err) => console.warn('Repayments listener error:', err));
     // Listen to activities collection
     const unsubActivities = onSnapshot(collection(db, 'groups', targetGroupId, 'activities'), triggerUpdate, (err) => console.warn('Activities listener error:', err));
+    // Listen to settlements collection
+    const unsubSettlements = onSnapshot(collection(db, 'groups', targetGroupId, 'settlements'), triggerUpdate, (err) => console.warn('Settlements listener error:', err));
 
     return () => {
       if (debounceTimer) clearTimeout(debounceTimer);
@@ -544,6 +558,7 @@ export const dashboardService = {
       unsubLoans();
       unsubRepay();
       unsubActivities();
+      unsubSettlements();
     };
   },
 };

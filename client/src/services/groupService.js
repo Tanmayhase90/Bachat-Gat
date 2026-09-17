@@ -55,9 +55,18 @@ export const groupService = {
 
       // 2. Total Savings
       const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
-      const totalSavings = allSavings
+      const grossSavings = allSavings
         .filter((c) => c.isPaid || c.paidAmount > 0)
         .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
+
+      const totalSettledSavings = settlementsSnap.docs.reduce((sum, d) => {
+        const data = d.data() || {};
+        const st = (data.status || '').toUpperCase();
+        if (st && st !== 'COMPLETED') return sum;
+        return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
+      }, 0);
+
+      const totalSavings = Math.max(0, grossSavings - totalSettledSavings);
 
       // 3. Loans & Repayments
       const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -100,7 +109,12 @@ export const groupService = {
       allLoansInterest += orphanRepaymentsInterest;
 
       const allContributionsInterest = allSavings.reduce((sum, c) => sum + (c.interestAmount || c.interest || 0), 0);
-      const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
+      const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => {
+        const data = d.data() || {};
+        const st = (data.status || '').toUpperCase();
+        if (st && st !== 'COMPLETED') return sum;
+        return sum + Number(data.interestShare || data.interest_share || 0);
+      }, 0);
 
       const totalInterest = Math.max(0, Math.round((allContributionsInterest + allLoansInterest - totalSettledInterest) * 100) / 100);
 
@@ -116,6 +130,9 @@ export const groupService = {
         total_savings: totalSavings,
         savingsTotal: totalSavings,
         savings_total: totalSavings,
+        totalSettledSavings,
+        total_settled_savings: totalSettledSavings,
+        totalSavingsSettled: totalSettledSavings,
         totalLoans: activeLoansTotal,
         total_loans: activeLoansTotal,
         activeLoans: activeLoansTotal,
@@ -137,6 +154,7 @@ export const groupService = {
         availableBalance,
         available_balance: availableBalance,
         balance: availableBalance,
+        totalSettledInterest,
         totalInterestSettled: totalSettledInterest,
         monthlyTarget,
         monthly_target: monthlyTarget,

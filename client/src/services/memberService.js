@@ -20,12 +20,13 @@ import {
   normalizeLoan,
   calculateMonthlyMemberStatus,
   isRegularMember,
+  isNonAdminMember,
   compareMemberNumericOrder,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
 import { groupService } from './groupService.js';
 
-export { calculateMonthlyMemberStatus, isRegularMember };
+export { calculateMonthlyMemberStatus, isRegularMember, isNonAdminMember };
 
 /**
  * Pure helper to compute Monthly Payment Summary across members
@@ -104,20 +105,19 @@ export const memberService = {
   getNextMemberCode: async (groupId = DEFAULT_GROUP_ID) => {
     const targetGroupId = groupId || DEFAULT_GROUP_ID;
     const membersSnap = await getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] }));
-    const existingNums = new Set();
-    membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((memberDoc) => {
+    let maxNumber = 0;
+    membersSnap.docs.filter((d) => isNonAdminMember(d.data())).forEach((memberDoc) => {
       const data = memberDoc.data();
       const candidates = [memberDoc.id, data.memberCode, data.member_code, data.memberId, data.member_id];
       candidates.forEach((value) => {
         const num = memberService.parseMemberNumber(value);
-        if (num !== null && num > 0) existingNums.add(num);
+        if (num !== null && num > maxNumber) {
+          maxNumber = num;
+        }
       });
     });
 
-    let nextNumber = 1;
-    while (existingNums.has(nextNumber)) {
-      nextNumber++;
-    }
+    const nextNumber = maxNumber + 1;
 
     return {
       success: true,
@@ -495,21 +495,9 @@ export const memberService = {
         const existing = duplicateMember.data();
         throw new Error(`Duplicate member not added. This name already belongs to ${existing.name || existing.fullName || duplicateMember.id}.`);
       }
-      const existingNums = new Set();
-      membersSnap.docs.filter((d) => isRegularMember(d.data())).forEach((d) => {
-        const data = d.data();
-        [d.id, data.memberCode, data.member_code, data.memberId, data.member_id].forEach((value) => {
-          const num = memberService.parseMemberNumber(value);
-          if (num !== null && num > 0) existingNums.add(num);
-        });
-      });
-
-      let nextNumber = 1;
-      while (existingNums.has(nextNumber)) {
-        nextNumber++;
-      }
-      const newMemberId = `M_${nextNumber}`;
-      const newMemberCode = `M-${nextNumber}`;
+      const codeRes = await memberService.getNextMemberCode(targetGroupId);
+      const newMemberId = codeRes.memberId;
+      const newMemberCode = codeRes.memberCode;
 
       const totalMonthlyContribution = parseFloat(memberData.monthly_contribution || memberData.monthlyContribution) || 1000;
       const numShares = parseInt(memberData.shares, 10) || 1;
@@ -815,20 +803,6 @@ export const memberService = {
       const memberInterestShare = Number(balanceRes.memberInterestShare || 0);
       const totalSettlementAmount = Math.round((lifetimeSavings + memberInterestShare) * 100) / 100;
 
-      const collectionNames = ['monthly_contributions', 'loans', 'repayments', 'activities', 'notifications'];
-      const relatedRefs = new Map();
-
-      for (const collectionName of collectionNames) {
-        const collectionRef = collection(db, 'groups', targetGroupId, collectionName);
-        const snapshots = await Promise.all([
-          getDocs(query(collectionRef, where('memberId', '==', memberId))).catch(() => ({ docs: [] })),
-          getDocs(query(collectionRef, where('member_id', '==', memberId))).catch(() => ({ docs: [] })),
-        ]);
-        snapshots.flatMap((snapshot) => snapshot.docs).forEach((documentSnap) => {
-          relatedRefs.set(documentSnap.ref.path, documentSnap.ref);
-        });
-      }
-
       // Record final settlement record in Firestore
       const settleId = `SETTLE_${Date.now()}_${memberId}`;
       const settlementDocRef = doc(db, 'groups', targetGroupId, 'settlements', settleId);
@@ -846,16 +820,43 @@ export const memberService = {
         createdAt: new Date().toISOString(),
       });
 
-      const refsToDelete = [memberDocRef, ...relatedRefs.values()];
-      if (linkedUid) refsToDelete.push(doc(db, 'users', linkedUid));
-      for (let start = 0; start < refsToDelete.length; start += 450) {
-        const batch = writeBatch(db);
-        refsToDelete.slice(start, start + 450).forEach((reference) => batch.delete(reference));
-        await batch.commit();
-      }
+      // Soft-delete / archive member document in Firestore preserving all historical data
+      const now = new Date().toISOString();
+      await setDoc(memberDocRef, {
+        isDeleted: true,
+        deleted: true,
+        is_deleted: true,
+        status: 'DELETED',
+        status_lower: 'deleted',
+        isActive: false,
+        is_active: 0,
+        deletedAt: now,
+        updatedAt: now,
+        settlementAmount: totalSettlementAmount,
+        settlementId: settleId,
+      }, { merge: true });
 
-      // Automatically compact remaining members so sequence remains M_1...M_N continuous with NO gaps
-      await memberService.compactMemberSequence(targetGroupId);
+      // If linked user doc exists, mark inactive/deleted without deleting record
+      if (linkedUid) {
+        try {
+          const userDocRef = doc(db, 'users', linkedUid);
+          const userSnap = await getDoc(userDocRef).catch(() => null);
+          if (userSnap && userSnap.exists()) {
+            const userRole = String(userSnap.data().role || '').toLowerCase();
+            if (userRole !== 'admin') {
+              await setDoc(userDocRef, {
+                isActive: false,
+                isDeleted: true,
+                deleted: true,
+                status: 'DELETED',
+                updatedAt: now,
+              }, { merge: true }).catch(() => null);
+            }
+          }
+        } catch (e) {
+          console.warn('Notice: Linked user update on soft delete:', e);
+        }
+      }
 
       // Log activity and recalculate authoritative Group aggregates from Firestore collections
       try {

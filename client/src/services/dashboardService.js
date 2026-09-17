@@ -9,10 +9,10 @@ import {
   limit as limitDocs,
   onSnapshot,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { groupService } from './groupService';
-import { reportService } from './reportService';
-import { notificationService } from './notificationService';
+import { db } from '../config/firebase.js';
+import { groupService } from './groupService.js';
+import { reportService } from './reportService.js';
+import { notificationService } from './notificationService.js';
 import {
   formatCurrency,
   normalizeGroup,
@@ -24,7 +24,7 @@ import {
   isRegularMember,
   calculateMonthlyMemberStatus,
   calculateMonthlyMemberStatuses,
-} from '../utils/formatters';
+} from '../utils/formatters.js';
 
 export { groupService, reportService, notificationService };
 

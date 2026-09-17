@@ -202,10 +202,8 @@ export const normalizeGroup = (id, data = {}) => {
   };
 };
 
-export const isRegularMember = (m) => {
+export const isNonAdminMember = (m) => {
   if (!m) return false;
-  const isDeleted = m.isDeleted === true || m.deleted === true;
-  if (isDeleted) return false;
   const rawRole = String(m.role || m.role_name || m.roleName || 'member').toLowerCase().trim();
   if (rawRole === 'admin' || rawRole === 'administrator' || rawRole === 'superadmin' || rawRole === 'group_admin') {
     return false;
@@ -213,12 +211,20 @@ export const isRegularMember = (m) => {
   return rawRole === 'member' || rawRole === 'treasurer' || rawRole === 'secretary' || rawRole === '';
 };
 
+export const isRegularMember = (m) => {
+  if (!m) return false;
+  const isDeleted = m.isDeleted === true || m.deleted === true || m.is_deleted === true || String(m.status || '').toUpperCase() === 'DELETED';
+  if (isDeleted) return false;
+  return isNonAdminMember(m);
+};
+
 export const normalizeMember = (id, data = {}) => {
   const memberId = id || data.id || data.memberId || data.member_id || '';
   const name = data.name || data.fullName || data.full_name || 'Member';
   const monthlyContribution = Number(data.monthlyContribution || data.monthlyContributionPerShare || data.monthlyHaftaAmount || data.monthly_contribution || 1000);
   const shares = Number(data.shares || data.shareCount || 1);
-  const status = (data.status || (data.isActive !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
+  const isDeleted = Boolean(data.isDeleted || data.deleted || data.is_deleted || String(data.status || '').toUpperCase() === 'DELETED');
+  const status = isDeleted ? 'DELETED' : (data.status || (data.isActive !== false ? 'ACTIVE' : 'INACTIVE')).toUpperCase();
   const rawRole = String(data.role || data.role_name || data.roleName || 'MEMBER').trim();
   const roleLower = rawRole.toLowerCase();
 
@@ -235,8 +241,12 @@ export const normalizeMember = (id, data = {}) => {
     monthlyContributionPerShare: monthlyContribution,
     monthly_contribution: monthlyContribution,
     status: status,
-    isActive: status === 'ACTIVE' || status === 'active',
-    is_active: (status === 'ACTIVE' || status === 'active') ? 1 : 0,
+    isDeleted: isDeleted,
+    deleted: isDeleted,
+    is_deleted: isDeleted,
+    deletedAt: data.deletedAt || data.deleted_at || null,
+    isActive: !isDeleted && (status === 'ACTIVE' || status === 'active'),
+    is_active: (!isDeleted && (status === 'ACTIVE' || status === 'active')) ? 1 : 0,
     joinDate: data.joinDate || data.joinedAt || data.joined_date || '',
     joinedAt: data.joinDate || data.joinedAt || data.joined_date || '',
     joined_date: data.joinDate || data.joinedAt || data.joined_date || '',

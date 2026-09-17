@@ -4,16 +4,17 @@ import {
   doc,
   getDoc,
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
-import { groupService } from './groupService';
+import { db } from '../config/firebase.js';
+import { groupService } from './groupService.js';
 import {
   normalizeSavings,
   normalizeLoan,
   normalizeMember,
   isRegularMember,
+  isNonAdminMember,
   compareMemberNumericOrder,
   DEFAULT_GROUP_ID,
-} from '../utils/formatters';
+} from '../utils/formatters.js';
 
 export const reportService = {
   /**
@@ -56,12 +57,6 @@ export const reportService = {
 
       // Sort members in ascending numerical order by Member ID / Member Code (e.g. M_1, M_2 ... M_10 ... M_365)
       activeMembers.sort(compareMemberNumericOrder);
-
-      // Dynamically auto-calculate monthly target from active members (Total Member Shares * Monthly Contribution Per Share)
-      const monthlyTarget = activeMembers.reduce(
-        (sum, mem) => sum + (Number(mem.shares || mem.shareCount || 1) * monthlyContributionPerShare),
-        0
-      );
 
       // Filter contributions for selected month and year
       const monthContributions = contributionsSnap.docs
@@ -166,7 +161,40 @@ export const reportService = {
         }
       });
 
-      const memberCollections = activeMembers.map((mem) => {
+      // Include archived / deleted regular members who participated in or existed during this month/year
+      const startOfReportMonth = new Date(y, m - 1, 1);
+      const qualifyingDeletedDocs = membersSnap.docs.filter((d) => {
+        const data = d.data();
+        if (!isNonAdminMember(data) || isRegularMember(data)) return false;
+        const memberId = d.id;
+        // 1. Did the member pay monthly contribution for this month/year?
+        const hasContrib = Boolean(paidMap[memberId]);
+        if (hasContrib) return true;
+        // 2. Did the member have a loan repayment in this month/year?
+        const hasRepay = (repaymentsByMember[memberId] || []).length > 0;
+        if (hasRepay) return true;
+        // 3. Was the member active during this month (deleted on or after the start of this month)?
+        const deletedAt = data.deletedAt || data.deleted_at;
+        if (deletedAt) {
+          const delDate = new Date(deletedAt);
+          if (!isNaN(delDate.getTime()) && delDate >= startOfReportMonth) {
+            return true;
+          }
+        }
+        return false;
+      });
+
+      const historicalMembers = qualifyingDeletedDocs.map((d) => normalizeMember(d.id, d.data()));
+      const reportMembers = [...activeMembers, ...historicalMembers];
+      reportMembers.sort(compareMemberNumericOrder);
+
+      // Monthly target reflecting members in this month's register
+      const monthlyTarget = reportMembers.reduce(
+        (sum, mem) => sum + (Number(mem.shares || mem.shareCount || 1) * monthlyContributionPerShare),
+        0
+      );
+
+      const memberCollections = reportMembers.map((mem) => {
         const savingRecord = paidMap[mem.id] || null;
         const memberShares = Number(mem.shares || mem.shareCount || 1);
         const memberMonthlySavings = memberShares * monthlyContributionPerShare;

@@ -415,7 +415,7 @@ const Settings = () => {
             }}
             className={`tab-btn ${activeTab === 'system' ? 'active' : ''}`}
           >
-            <ShieldCheck size={18} /> {t('settings.systemTab', 'Licence & Backup')}
+            <ShieldCheck size={18} /> {t('settings.systemTab', 'Backup')}
           </button>
         )}
       </div>
@@ -591,164 +591,166 @@ const Settings = () => {
         </div>
       )}
 
-      {/* TAB 3: LICENCE & BACKUP & RESTORE */}
+      {/* TAB 3: BACKUP & RESTORE */}
       {activeTab === 'system' && isAdmin && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {/* 1. LICENCE CARD */}
-          <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          {/* 1. LICENCE CARD (Hidden from UI; functionality preserved) */}
+          {false && (
+            <div className="card">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '8px',
+                      backgroundColor: '#F3E8FF',
+                      color: '#9333EA',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <KeyRound size={20} />
+                  </div>
+                  <div>
+                    <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                      {t('settings.licence', 'LICENCE')}
+                    </h2>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Bachat Gat Digital Savings License Management
+                    </span>
+                  </div>
+                </div>
+
                 <div
                   style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    backgroundColor: '#F3E8FF',
-                    color: '#9333EA',
                     display: 'flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
+                    gap: '6px',
+                    padding: '4px 12px',
+                    borderRadius: '20px',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    backgroundColor: licenseStatus.isExpired
+                      ? '#FEE2E2'
+                      : licenseStatus.needsWarning
+                      ? '#FEF3C7'
+                      : '#DCFCE7',
+                    color: licenseStatus.isExpired
+                      ? '#991B1B'
+                      : licenseStatus.needsWarning
+                      ? '#92400E'
+                      : '#166534',
                   }}
                 >
-                  <KeyRound size={20} />
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
-                    {t('settings.licence', 'LICENCE')}
-                  </h2>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    Bachat Gat Digital Savings License Management
-                  </span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '4px 12px',
-                  borderRadius: '20px',
-                  fontSize: '0.8rem',
-                  fontWeight: 700,
-                  backgroundColor: licenseStatus.isExpired
-                    ? '#FEE2E2'
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: licenseStatus.isExpired
+                        ? '#DC2626'
+                        : licenseStatus.needsWarning
+                        ? '#D97706'
+                        : '#16A34A',
+                    }}
+                  />
+                  {licenseStatus.isExpired
+                    ? t('settings.expired')
                     : licenseStatus.needsWarning
-                    ? '#FEF3C7'
-                    : '#DCFCE7',
-                  color: licenseStatus.isExpired
-                    ? '#991B1B'
-                    : licenseStatus.needsWarning
-                    ? '#92400E'
-                    : '#166534',
-                }}
-              >
-                <span
-                  style={{
-                    width: '8px',
-                    height: '8px',
-                    borderRadius: '50%',
-                    backgroundColor: licenseStatus.isExpired
-                      ? '#DC2626'
-                      : licenseStatus.needsWarning
-                      ? '#D97706'
-                      : '#16A34A',
-                  }}
-                />
-                {licenseStatus.isExpired
-                  ? t('settings.expired')
-                  : licenseStatus.needsWarning
-                  ? t('settings.expiringSoon')
-                  : t('settings.active')}
-              </div>
-            </div>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '16px' }}>
-              <div
-                style={{
-                  padding: '12px 14px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  {t('settings.expiryDate')}
-                </div>
-                <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)' }}>
-                  {licenseStatus.expiryDate}
+                    ? t('settings.expiringSoon')
+                    : t('settings.active')}
                 </div>
               </div>
 
-              <div
-                style={{
-                  padding: '12px 14px',
-                  backgroundColor: '#F8FAFC',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border-color)',
-                }}
-              >
-                <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
-                  {t('settings.daysRemaining')}
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', marginBottom: '16px' }}>
                 <div
                   style={{
-                    fontWeight: 800,
-                    fontSize: '1rem',
-                    color: licenseStatus.isExpired
-                      ? '#DC2626'
-                      : licenseStatus.needsWarning
-                      ? '#D97706'
-                      : 'var(--primary)',
+                    padding: '12px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
                   }}
                 >
-                  {licenseStatus.daysRemaining} {t('settings.days', 'days')}
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    {t('settings.expiryDate')}
+                  </div>
+                  <div style={{ fontWeight: 800, fontSize: '1rem', color: 'var(--text-primary)' }}>
+                    {licenseStatus.expiryDate}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: '12px 14px',
+                    backgroundColor: '#F8FAFC',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                    {t('settings.daysRemaining')}
+                  </div>
+                  <div
+                    style={{
+                      fontWeight: 800,
+                      fontSize: '1rem',
+                      color: licenseStatus.isExpired
+                        ? '#DC2626'
+                        : licenseStatus.needsWarning
+                        ? '#D97706'
+                        : 'var(--primary)',
+                    }}
+                  >
+                    {licenseStatus.daysRemaining} {t('settings.days', 'days')}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Machine ID */}
-            <div style={{ marginBottom: '18px' }}>
-              <label className="form-label">{t('settings.machineId')}</label>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  backgroundColor: '#F8FAFC',
-                  border: '1px solid var(--border-color)',
-                  borderRadius: 'var(--radius-md)',
-                  fontFamily: 'monospace',
-                  fontSize: '0.95rem',
-                  fontWeight: 700,
-                  letterSpacing: '0.05em',
-                }}
-              >
-                <span>{licenseStatus.machineId}</span>
+              {/* Machine ID */}
+              <div style={{ marginBottom: '18px' }}>
+                <label className="form-label">{t('settings.machineId')}</label>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    backgroundColor: '#F8FAFC',
+                    border: '1px solid var(--border-color)',
+                    borderRadius: 'var(--radius-md)',
+                    fontFamily: 'monospace',
+                    fontSize: '0.95rem',
+                    fontWeight: 700,
+                    letterSpacing: '0.05em',
+                  }}
+                >
+                  <span>{licenseStatus.machineId}</span>
+                  <button
+                    type="button"
+                    onClick={handleCopyMachineId}
+                    className="btn-secondary"
+                    style={{ padding: '4px 10px', fontSize: '0.75rem', gap: '4px' }}
+                  >
+                    {copiedMachineId ? <Check size={14} color="#16A34A" /> : <Copy size={14} />}
+                    {copiedMachineId ? t('settings.copied') : t('settings.copyMachineId')}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                   type="button"
-                  onClick={handleCopyMachineId}
-                  className="btn-secondary"
-                  style={{ padding: '4px 10px', fontSize: '0.75rem', gap: '4px' }}
+                  className="btn-primary"
+                  onClick={() => setIsActivateOpen(true)}
                 >
-                  {copiedMachineId ? <Check size={14} color="#16A34A" /> : <Copy size={14} />}
-                  {copiedMachineId ? t('settings.copied') : t('settings.copyMachineId')}
+                  <KeyRound size={16} />
+                  {t('settings.activateLicence')}
                 </button>
               </div>
             </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <button
-                type="button"
-                className="btn-primary"
-                onClick={() => setIsActivateOpen(true)}
-              >
-                <KeyRound size={16} />
-                {t('settings.activateLicence')}
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* 2. BACKUP & RESTORE CARD */}
           <div className="card">

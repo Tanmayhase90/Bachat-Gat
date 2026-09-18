@@ -541,11 +541,30 @@ export const loanService = {
         (Number(loanData.principalAmount || loanData.originalPrincipal || loanData.amount || 0) - Number(loanData.totalPrincipalPaid || loanData.total_principal_paid || 0)) || 0
       );
 
-      if ((loanData.status || 'active').toLowerCase() !== 'active') throw new Error('This loan is already closed.');
-      if (principalRepay < 0 || principalRepay > currentPending) throw new Error('Principal repayment is outside the valid outstanding balance.');
+      if ((loanData.status || 'active').toLowerCase() !== 'active') {
+        throw new Error('This loan is already closed.');
+      }
+
+      if (principalRepay < 0) {
+        throw new Error('Principal repayment amount cannot be negative.');
+      }
+
+      if (currentPending <= 0 && principalRepay > 0) {
+        throw new Error('Outstanding principal is ₹0. No additional principal repayment can be accepted.');
+      }
+
+      if (principalRepay > currentPending) {
+        throw new Error(`Principal repayment cannot exceed the outstanding principal of ₹${Math.round(currentPending).toLocaleString('en-IN')}.`);
+      }
+
       const interestRate = Number(loanData.interestRate || 2.0);
       const calculatedInterest = Math.round(((currentPending * interestRate) / 100) * 100) / 100;
-      const totalPayment = principalRepay + calculatedInterest + regularHafta;
+      const totalPayment = Math.round((principalRepay + calculatedInterest + regularHafta) * 100) / 100;
+
+      const maxAllowedTotal = Math.round((currentPending + calculatedInterest + regularHafta) * 100) / 100;
+      if (totalPayment > maxAllowedTotal) {
+        throw new Error(`Total repayment cannot exceed ₹${Math.round(currentPending + calculatedInterest).toLocaleString('en-IN')} (₹${Math.round(currentPending).toLocaleString('en-IN')} principal + ₹${calculatedInterest.toLocaleString('en-IN')} interest).`);
+      }
 
       const memberId = loanData.memberId;
       const currentPrincipalPaid = Number(loanData.totalPrincipalPaid || loanData.total_principal_paid || 0);

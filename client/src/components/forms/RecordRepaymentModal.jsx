@@ -160,6 +160,28 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
   const totalPayment = Math.round((principalRepay + calculatedInterest + regularHafta) * 100) / 100;
   const newOutstanding = Math.max(0, Math.round((currentOutstanding - principalRepay) * 100) / 100);
 
+  // Maximum repayment boundaries
+  const maxAllowedPrincipal = Math.max(0, currentOutstanding);
+  const maxAllowedTotal = Math.round((maxAllowedPrincipal + calculatedInterest) * 100) / 100;
+  const maxAllowedTotalWithHafta = Math.round((maxAllowedTotal + regularHafta) * 100) / 100;
+
+  const isPrincipalOverLimit = principalRepay > maxAllowedPrincipal;
+  const isTotalOverLimit = totalPayment > maxAllowedTotalWithHafta;
+  const isPrincipalNegative = principalRepay < 0;
+  const isAmountInvalid = isPrincipalOverLimit || isTotalOverLimit || isPrincipalNegative;
+
+  const validationError = isPrincipalNegative
+    ? (language === 'mr' ? 'मुद्दल परतफेड रक्कम ० पेक्षा कमी असू शकत नाही.' : 'Principal repayment amount cannot be negative.')
+    : isPrincipalOverLimit
+    ? (language === 'mr'
+        ? `मुद्दल परतफेड बाकी मुद्दल ${formatCurrency(maxAllowedPrincipal)} पेक्षा जास्त असू शकत नाही.`
+        : `Principal repayment cannot exceed the outstanding principal of ${formatCurrency(maxAllowedPrincipal)}.`)
+    : isTotalOverLimit
+    ? (language === 'mr'
+        ? `एकूण परतफेड ${formatCurrency(maxAllowedTotalWithHafta)} (${formatCurrency(maxAllowedPrincipal)} मुद्दल + ${formatCurrency(calculatedInterest)} व्याज) पेक्षा जास्त असू शकत नाही.`
+        : `Total repayment cannot exceed ${formatCurrency(maxAllowedTotalWithHafta)} (${formatCurrency(maxAllowedPrincipal)} principal + ${formatCurrency(calculatedInterest)} interest).`)
+    : '';
+
   const handleSelectLoan = (loan) => {
     setSelectedLoanId(loan.id.toString());
     setFormData((prev) => ({
@@ -190,8 +212,9 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
   const handleSetFullRepayment = () => {
     setFormData((prev) => ({
       ...prev,
-      principal_repayment_amount: currentOutstanding.toString(),
+      principal_repayment_amount: maxAllowedPrincipal.toString(),
     }));
+    setError('');
   };
 
   const handleSetInterestOnly = () => {
@@ -199,6 +222,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
       ...prev,
       principal_repayment_amount: '0',
     }));
+    setError('');
   };
 
   const handleOpenConfirm = (e) => {
@@ -209,16 +233,25 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
       return;
     }
 
-    if (principalRepay < 0) {
+    if (isPrincipalNegative) {
       setError(language === 'mr' ? 'मुद्दल परतफेड रक्कम ० पेक्षा कमी असू शकत नाही.' : 'Principal repayment amount cannot be negative.');
       return;
     }
 
-    if (principalRepay > currentOutstanding) {
+    if (isPrincipalOverLimit) {
       setError(
         language === 'mr'
-          ? `मुद्दल परतफेड रक्कम (${formatCurrency(principalRepay)}) बाकी मुद्दलापेक्षा (${formatCurrency(currentOutstanding)}) जास्त असू शकत नाही.`
-          : `Principal repayment (${formatCurrency(principalRepay)}) cannot exceed outstanding principal (${formatCurrency(currentOutstanding)}).`
+          ? `मुद्दल परतफेड बाकी मुद्दल ${formatCurrency(maxAllowedPrincipal)} पेक्षा जास्त असू शकत नाही.`
+          : `Principal repayment cannot exceed the outstanding principal of ${formatCurrency(maxAllowedPrincipal)}.`
+      );
+      return;
+    }
+
+    if (isTotalOverLimit) {
+      setError(
+        language === 'mr'
+          ? `एकूण परतफेड ${formatCurrency(maxAllowedTotalWithHafta)} (${formatCurrency(maxAllowedPrincipal)} मुद्दल + ${formatCurrency(calculatedInterest)} व्याज) पेक्षा जास्त असू शकत नाही.`
+          : `Total repayment cannot exceed ${formatCurrency(maxAllowedTotalWithHafta)} (${formatCurrency(maxAllowedPrincipal)} principal + ${formatCurrency(calculatedInterest)} interest).`
       );
       return;
     }
@@ -234,6 +267,12 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
 
   const handleConfirmRepay = async () => {
     try {
+      if (isAmountInvalid) {
+        setError(validationError || (language === 'mr' ? 'अवैध परतफेड रक्कम.' : 'Invalid repayment amount.'));
+        setShowConfirmModal(false);
+        return;
+      }
+
       setLoading(true);
       setError('');
       const res = await loanService.recordRepayment({
@@ -313,7 +352,13 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
             <button type="button" onClick={onClose} className="btn-secondary" tabIndex={0} disabled={loading}>
               {language === 'mr' ? 'रद्द करा' : 'Cancel'}
             </button>
-            <button type="submit" className="btn-primary" disabled={loading || !selectedLoan} tabIndex={0}>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading || !selectedLoan || isAmountInvalid}
+              style={isAmountInvalid ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+              tabIndex={0}
+            >
               <CreditCard size={16} />
               {loading
                 ? (language === 'mr' ? 'नोंदवत आहे...' : 'Recording...')
@@ -328,7 +373,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
       }
     >
       <div>
-        {error && (
+        {(error || validationError) && (
           <div
             style={{
               padding: '10px 14px',
@@ -342,7 +387,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               gap: '8px',
             }}
           >
-            <AlertCircle size={16} /> {error}
+            <AlertCircle size={16} /> {error || validationError}
           </div>
         )}
 
@@ -788,7 +833,7 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
                     tabIndex={0}
                     style={{ background: 'none', color: 'var(--primary)', fontSize: '0.75rem', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
                   >
-                    {language === 'mr' ? `पूर्ण मुद्दल भरा (${formatCurrency(currentOutstanding)})` : `Pay Full Principal (${formatCurrency(currentOutstanding)})`}
+                    {language === 'mr' ? `पूर्ण मुद्दल भरा (${formatCurrency(maxAllowedPrincipal)})` : `Pay Full Principal (${formatCurrency(maxAllowedPrincipal)})`}
                   </button>
                 </div>
               </div>
@@ -796,29 +841,62 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
                 type="number"
                 name="principal_repayment_amount"
                 className="form-input"
+                style={isPrincipalOverLimit ? { borderColor: 'var(--danger)', background: 'rgba(239, 68, 68, 0.05)' } : {}}
                 value={formData.principal_repayment_amount}
                 onChange={handleChange}
                 tabIndex={0}
                 min="0"
-                max={currentOutstanding}
+                max={maxAllowedPrincipal}
                 step="1"
                 placeholder="0"
               />
+              {isPrincipalOverLimit && (
+                <div style={{ color: 'var(--danger)', fontSize: '0.8rem', marginTop: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <AlertCircle size={14} />
+                  {language === 'mr'
+                    ? `कमाल मुद्दल परतफेड ${formatCurrency(maxAllowedPrincipal)} अनुज्ञेय आहे.`
+                    : `Maximum principal repayment allowed is ${formatCurrency(maxAllowedPrincipal)}.`}
+                </div>
+              )}
             </div>
 
             {/* Automatic Live Calculation Box */}
             <div
               style={{
                 padding: '16px',
-                background: 'linear-gradient(135deg, rgba(190, 24, 93, 0.08) 0%, rgba(233, 30, 99, 0.03) 100%)',
+                background: isAmountInvalid
+                  ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.03) 100%)'
+                  : 'linear-gradient(135deg, rgba(190, 24, 93, 0.08) 0%, rgba(233, 30, 99, 0.03) 100%)',
                 borderRadius: 'var(--radius-lg)',
-                border: '1px solid rgba(190, 24, 93, 0.25)',
+                border: isAmountInvalid
+                  ? '1.5px solid rgba(239, 68, 68, 0.5)'
+                  : '1px solid rgba(190, 24, 93, 0.25)',
                 marginBottom: '16px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--primary)', fontWeight: 700, fontSize: '0.85rem', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: isAmountInvalid ? 'var(--danger)' : 'var(--primary)', fontWeight: 700, fontSize: '0.85rem', marginBottom: '10px' }}>
                 <Calculator size={16} /> {language === 'mr' ? 'एकूण रक्कम गणना' : 'AUTOMATIC PAYMENT CALCULATION'}
               </div>
+
+              {isAmountInvalid && (
+                <div
+                  style={{
+                    padding: '8px 12px',
+                    background: 'var(--danger-light, #fee2e2)',
+                    color: 'var(--danger-text, #991b1b)',
+                    borderRadius: 'var(--radius-sm, 6px)',
+                    fontSize: '0.8rem',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    marginBottom: '10px',
+                  }}
+                >
+                  <AlertCircle size={15} />
+                  {validationError || (language === 'mr' ? 'अवैध रक्कम: परतफेड मर्यादा ओलांडली आहे' : 'Invalid Amount: Repayment limit exceeded')}
+                </div>
+              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '0.875rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -831,7 +909,9 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
                   <span style={{ color: 'var(--text-secondary)' }}>
                     {language === 'mr' ? 'मुद्दल परतफेड' : 'Principal Repayment'}:
                   </span>
-                  <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(principalRepay)}</span>
+                  <span style={{ fontWeight: 600, color: isPrincipalOverLimit ? 'var(--danger)' : 'var(--text-primary)' }}>
+                    {formatCurrency(principalRepay)} {isPrincipalOverLimit && '(Over Limit)'}
+                  </span>
                 </div>
                 {regularHafta > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -841,17 +921,19 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
                     <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatCurrency(regularHafta)}</span>
                   </div>
                 )}
-                <div style={{ height: '1px', background: 'rgba(190, 24, 93, 0.2)', margin: '4px 0' }} />
+                <div style={{ height: '1px', background: isAmountInvalid ? 'rgba(239, 68, 68, 0.3)' : 'rgba(190, 24, 93, 0.2)', margin: '4px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.05rem', fontWeight: 800 }}>
-                  <span style={{ color: 'var(--primary)' }}>
+                  <span style={{ color: isAmountInvalid ? 'var(--danger)' : 'var(--primary)' }}>
                     {language === 'mr' ? 'एकूण जमा रक्कम (व्याज + मुद्दल):' : 'Total Payment Collected:'}
                   </span>
-                  <span style={{ color: 'var(--primary)' }}>{formatCurrency(totalPayment)}</span>
+                  <span style={{ color: isAmountInvalid ? 'var(--danger)' : 'var(--primary)' }}>
+                    {formatCurrency(totalPayment)}
+                  </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: 'var(--text-muted)', marginTop: '2px' }}>
                   <span>{language === 'mr' ? 'नवीन बाकी मुद्दल शिल्लक:' : 'New Outstanding Balance:'}</span>
-                  <span style={{ fontWeight: 700, color: newOutstanding === 0 ? 'var(--success-text)' : 'var(--text-primary)' }}>
-                    {formatCurrency(newOutstanding)} {newOutstanding === 0 && (language === 'mr' ? '(कर्ज पूर्ण बंद होईल)' : '(Will mark loan as CLOSED)')}
+                  <span style={{ fontWeight: 700, color: isPrincipalOverLimit ? 'var(--danger)' : newOutstanding === 0 ? 'var(--success-text)' : 'var(--text-primary)' }}>
+                    {isPrincipalOverLimit ? (language === 'mr' ? '— (अवैध रक्कम)' : '— (Invalid Amount)') : `${formatCurrency(newOutstanding)} ${newOutstanding === 0 ? (language === 'mr' ? '(कर्ज पूर्ण बंद होईल)' : '(Will mark loan as CLOSED)') : ''}`}
                   </span>
                 </div>
               </div>

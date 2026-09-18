@@ -19,9 +19,10 @@ const STORAGE_KEYS = {
   DRIVE_TOKEN: 'drive_access_token',
   DRIVE_FOLDER_ID: 'drive_folder_id',
   CUSTOM_CLIENT_ID: 'google_client_id',
+  TARGET_EMAIL: 'drive_target_email',
 };
 
-const DATED_FILE_PREFIX = 'Bachat-Gat-Backup-';
+const DATED_FILE_PREFIX = 'BachatGat_Backup_';
 const DATED_FILE_SUFFIX = '.json';
 const DRIVE_FOLDER_NAME = 'Bachat Gat Backups';
 
@@ -30,13 +31,17 @@ let activeDriveAccessToken = null;
 let gisTokenClient = null;
 
 /**
- * Format today's date into YYYYMMDD
+ * Format today's date into BachatGat_Backup_YYYY-MM-DD_HH-mm-ss.json
  */
 function getDatedFileName(date = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0');
   const yyyy = date.getFullYear();
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const dd = String(date.getDate()).padStart(2, '0');
-  return `${DATED_FILE_PREFIX}${yyyy}${mm}${dd}${DATED_FILE_SUFFIX}`;
+  const mm = pad(date.getMonth() + 1);
+  const dd = pad(date.getDate());
+  const hh = pad(date.getHours());
+  const min = pad(date.getMinutes());
+  const ss = pad(date.getSeconds());
+  return `${DATED_FILE_PREFIX}${yyyy}-${mm}-${dd}_${hh}-${min}-${ss}${DATED_FILE_SUFFIX}`;
 }
 
 export const backupService = {
@@ -59,6 +64,24 @@ export const backupService = {
       localStorage.setItem(STORAGE_KEYS.CUSTOM_CLIENT_ID, clientId.trim());
     } else {
       localStorage.removeItem(STORAGE_KEYS.CUSTOM_CLIENT_ID);
+    }
+  },
+
+  /**
+   * Get stored Google Drive target email
+   */
+  getTargetEmail: () => {
+    return localStorage.getItem(STORAGE_KEYS.TARGET_EMAIL) || '';
+  },
+
+  /**
+   * Set stored Google Drive target email
+   */
+  setTargetEmail: (email) => {
+    if (email && email.trim()) {
+      localStorage.setItem(STORAGE_KEYS.TARGET_EMAIL, email.trim().toLowerCase());
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.TARGET_EMAIL);
     }
   },
 
@@ -101,6 +124,7 @@ export const backupService = {
       contributionsSnap,
       loansSnap,
       repaymentsSnap,
+      settlementsSnap,
       activitiesSnap,
       notificationsSnap,
       txSnap,
@@ -110,6 +134,7 @@ export const backupService = {
       getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'groups', targetGroupId, 'settlements')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'groups', targetGroupId, 'activities')).catch(() => ({ docs: [] })),
       getDocs(collection(db, 'groups', targetGroupId, 'notifications')).catch(() => ({ docs: [] })),
       getDocs(query(collection(db, 'transactions'), where('groupId', '==', targetGroupId))).catch(() => ({ docs: [] })),
@@ -131,6 +156,7 @@ export const backupService = {
       monthly_contributions: serializeDocs(contributionsSnap),
       loans: serializeDocs(loansSnap),
       repayments: serializeDocs(repaymentsSnap),
+      settlements: serializeDocs(settlementsSnap),
       activities: serializeDocs(activitiesSnap),
       notifications: serializeDocs(notificationsSnap),
       transactions: serializeDocs(txSnap),
@@ -225,6 +251,9 @@ export const backupService = {
       await replaceSubcollection(collection(db, 'groups', targetGroupId, 'loans'), backup.loans);
       await replaceSubcollection(collection(db, 'groups', targetGroupId, 'repayments'), backup.repayments);
 
+      if (backup.settlements) {
+        await replaceSubcollection(collection(db, 'groups', targetGroupId, 'settlements'), backup.settlements);
+      }
       if (backup.activities) {
         await replaceSubcollection(collection(db, 'groups', targetGroupId, 'activities'), backup.activities);
       }
@@ -323,13 +352,15 @@ export const backupService = {
   /**
    * Authorize Google Drive via Google Identity Services Token Client
    */
-  connectGoogleDrive: async () => {
+  connectGoogleDrive: async (hintEmail = '') => {
     const clientId = backupService.getGoogleClientId();
     if (!clientId) {
       throw new Error(
         'Google Client ID is not configured. Please set VITE_GOOGLE_CLIENT_ID in your environment or provide it in Settings.'
       );
     }
+
+    const emailToUse = (hintEmail && hintEmail.trim()) || backupService.getTargetEmail();
 
     await backupService.loadGoogleScript();
 
@@ -353,26 +384,32 @@ export const backupService = {
               const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
               });
-              const profile = await res.json();
-              localStorage.setItem(
-                STORAGE_KEYS.DRIVE_PROFILE,
-                JSON.stringify({
-                  email: profile.email,
-                  name: profile.name,
-                  picture: profile.picture,
-                })
-              );
-              resolve(profile);
+              const profile = res.ok ? await res.json() : {};
+              const resolvedEmail = profile.email || emailToUse || 'Connected Account';
+              const resolvedProfile = {
+                email: resolvedEmail,
+                name: profile.name || resolvedEmail.split('@')[0],
+                picture: profile.picture || null,
+              };
+              localStorage.setItem(STORAGE_KEYS.DRIVE_PROFILE, JSON.stringify(resolvedProfile));
+              if (resolvedEmail && resolvedEmail !== 'Connected Account') {
+                localStorage.setItem(STORAGE_KEYS.TARGET_EMAIL, resolvedEmail);
+              }
+              resolve(resolvedProfile);
             } catch (err) {
-              // Fallback profile if userinfo fails
-              const fallback = { email: 'Connected Account', name: 'Google User', picture: null };
+              // Fallback profile if userinfo endpoint fails
+              const fallback = { email: emailToUse || 'Connected Account', name: 'Google User', picture: null };
               localStorage.setItem(STORAGE_KEYS.DRIVE_PROFILE, JSON.stringify(fallback));
               resolve(fallback);
             }
           },
         });
 
-        gisTokenClient.requestAccessToken({ prompt: 'consent' });
+        const tokenRequestOptions = { prompt: 'consent' };
+        if (emailToUse) {
+          tokenRequestOptions.hint = emailToUse;
+        }
+        gisTokenClient.requestAccessToken(tokenRequestOptions);
       } catch (err) {
         reject(err);
       }
@@ -395,49 +432,55 @@ export const backupService = {
     const cachedFolderId = localStorage.getItem(STORAGE_KEYS.DRIVE_FOLDER_ID);
     if (cachedFolderId) return cachedFolderId;
 
-    // Search for folder
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(
-      DRIVE_FOLDER_NAME
-    )}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`;
+    try {
+      // Search for folder
+      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=name='${encodeURIComponent(
+        DRIVE_FOLDER_NAME
+      )}' and mimeType='application/vnd.google-apps.folder' and trashed=false&fields=files(id,name)`;
 
-    const searchRes = await fetch(searchUrl, {
-      headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
-    });
-    const searchData = await searchRes.json();
+      const searchRes = await fetch(searchUrl, {
+        headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
+      });
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.files && searchData.files.length > 0) {
+          const folderId = searchData.files[0].id;
+          localStorage.setItem(STORAGE_KEYS.DRIVE_FOLDER_ID, folderId);
+          return folderId;
+        }
+      }
 
-    if (searchData.files && searchData.files.length > 0) {
-      const folderId = searchData.files[0].id;
-      localStorage.setItem(STORAGE_KEYS.DRIVE_FOLDER_ID, folderId);
-      return folderId;
-    }
-
-    // Create folder
-    const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${activeDriveAccessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        name: DRIVE_FOLDER_NAME,
-        mimeType: 'application/vnd.google-apps.folder',
-      }),
-    });
-    const folderData = await createRes.json();
-    if (folderData.id) {
-      localStorage.setItem(STORAGE_KEYS.DRIVE_FOLDER_ID, folderData.id);
-      return folderData.id;
+      // Create folder
+      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${activeDriveAccessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: DRIVE_FOLDER_NAME,
+          mimeType: 'application/vnd.google-apps.folder',
+        }),
+      });
+      if (createRes.ok) {
+        const folderData = await createRes.json();
+        if (folderData.id) {
+          localStorage.setItem(STORAGE_KEYS.DRIVE_FOLDER_ID, folderData.id);
+          return folderData.id;
+        }
+      }
+    } catch (err) {
+      console.warn('Could not ensure Drive folder, uploading to root:', err);
     }
     return null;
   },
 
   /**
-   * Upload backup to Google Drive (updating same-day backup if present)
+   * Upload backup to Google Drive
    */
-  uploadToGoogleDrive: async (groupId = DEFAULT_GROUP_ID) => {
+  uploadToGoogleDrive: async (groupId = DEFAULT_GROUP_ID, hintEmail) => {
     if (!activeDriveAccessToken) {
-      // Prompt user to reconnect
-      await backupService.connectGoogleDrive();
+      await backupService.connectGoogleDrive(hintEmail);
     }
 
     const folderId = await backupService.ensureDriveFolder();
@@ -445,64 +488,43 @@ export const backupService = {
     const jsonString = JSON.stringify(backupData, null, 2);
     const fileName = getDatedFileName();
 
-    // Check if same-day backup already exists
-    let queryStr = `name='${fileName}' and trashed=false`;
-    if (folderId) {
-      queryStr += ` and '${folderId}' in parents`;
-    }
+    // Create new backup file
+    const metadata = {
+      name: fileName,
+      mimeType: 'application/json',
+      description: 'Bachat Gat Complete Backup',
+      ...(folderId ? { parents: [folderId] } : {}),
+    };
 
-    const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
-      queryStr
-    )}&fields=files(id,name)`;
-    const searchRes = await fetch(searchUrl, {
-      headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelim = `\r\n--${boundary}--`;
+
+    const multipartRequestBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      jsonString +
+      closeDelim;
+
+    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${activeDriveAccessToken}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+      },
+      body: multipartRequestBody,
     });
-    const searchData = await searchRes.json();
-    const existingFile = searchData.files && searchData.files.length > 0 ? searchData.files[0] : null;
 
-    if (existingFile) {
-      // Update existing same-day backup
-      await fetch(
-        `https://www.googleapis.com/upload/drive/v3/files/${existingFile.id}?uploadType=media`,
-        {
-          method: 'PATCH',
-          headers: {
-            Authorization: `Bearer ${activeDriveAccessToken}`,
-            'Content-Type': 'application/json;charset=UTF-8',
-          },
-          body: jsonString,
-        }
-      );
-    } else {
-      // Create new backup file
-      const metadata = {
-        name: fileName,
-        mimeType: 'application/json',
-        description: 'Bachat Gat Complete Backup',
-        ...(folderId ? { parents: [folderId] } : {}),
-      };
-
-      const boundary = '-------314159265358979323846';
-      const delimiter = `\r\n--${boundary}\r\n`;
-      const closeDelim = `\r\n--${boundary}--`;
-
-      const multipartRequestBody =
-        delimiter +
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-        JSON.stringify(metadata) +
-        delimiter +
-        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
-        jsonString +
-        closeDelim;
-
-      await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${activeDriveAccessToken}`,
-          'Content-Type': `multipart/related; boundary=${boundary}`,
-        },
-        body: multipartRequestBody,
-      });
+    if (!uploadRes.ok) {
+      if (uploadRes.status === 401) {
+        activeDriveAccessToken = null;
+        throw new Error('Google Drive authorization expired. Please reconnect your Google Drive account.');
+      }
+      const errData = await uploadRes.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `Google Drive upload failed (${uploadRes.status}).`);
     }
 
     const nowIso = new Date().toISOString();
@@ -513,13 +535,13 @@ export const backupService = {
   /**
    * List available Bachat Gat backups from Google Drive
    */
-  getGoogleDriveBackups: async () => {
+  getGoogleDriveBackups: async (hintEmail) => {
     if (!activeDriveAccessToken) {
-      await backupService.connectGoogleDrive();
+      await backupService.connectGoogleDrive(hintEmail);
     }
 
     const folderId = await backupService.ensureDriveFolder();
-    let queryStr = `name contains '${DATED_FILE_PREFIX}' and trashed=false`;
+    let queryStr = `(name contains 'BachatGat_Backup_' or name contains 'Bachat-Gat-Backup-') and trashed=false`;
     if (folderId) {
       queryStr += ` and '${folderId}' in parents`;
     }
@@ -531,6 +553,16 @@ export const backupService = {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
     });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        activeDriveAccessToken = null;
+        throw new Error('Google Drive authorization expired. Please reconnect your Google Drive account.');
+      }
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData?.error?.message || `Failed to load Google Drive backups (${res.status}).`);
+    }
+
     const data = await res.json();
     return data.files || [];
   },
@@ -545,6 +577,15 @@ export const backupService = {
     const res = await fetch(url, {
       headers: { Authorization: `Bearer ${activeDriveAccessToken}` },
     });
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        activeDriveAccessToken = null;
+        throw new Error('Google Drive authorization expired. Please reconnect your Google Drive account.');
+      }
+      throw new Error(`Failed to download backup file from Google Drive (${res.status}).`);
+    }
+
     const backupJson = await res.json();
     await backupService.restoreBackupData(backupJson, groupId);
     return backupJson;

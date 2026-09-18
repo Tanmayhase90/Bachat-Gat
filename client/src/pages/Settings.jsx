@@ -32,7 +32,6 @@ import {
   Copy,
   Check,
   RotateCcw,
-  Sliders,
 } from 'lucide-react';
 
 const Settings = () => {
@@ -93,7 +92,10 @@ const Settings = () => {
   const [backupActionLoading, setBackupActionLoading] = useState('');
   const [driveProfile, setDriveProfile] = useState(backupService.getDriveProfile());
   const driveConnected = Boolean(driveProfile && (driveProfile.email || driveProfile.name));
-  const [autoBackup, setAutoBackup] = useState(backupService.getAutoBackupEnabled());
+  const [driveEmail, setDriveEmail] = useState(
+    backupService.getTargetEmail() || driveProfile?.email || ''
+  );
+  const [emailError, setEmailError] = useState('');
   const [lastBackupTime, setLastBackupTime] = useState(backupService.getLastBackupTime());
   const [copiedMachineId, setCopiedMachineId] = useState(false);
   const fileInputRef = useRef(null);
@@ -108,12 +110,34 @@ const Settings = () => {
     setTimeout(() => setCopiedMachineId(false), 2000);
   };
 
-  const handleConnectDrive = async () => {
+  const validateEmailFormat = (email) => {
+    if (!email || !email.trim()) return false;
+    const re = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    return re.test(email.trim());
+  };
+
+  const handleConnectOrSaveEmail = async () => {
+    const trimmedEmail = driveEmail.trim();
+    if (!trimmedEmail) {
+      setEmailError(t('settings.invalidEmail', 'Please enter a valid Google email address (e.g. admin@gmail.com).'));
+      return;
+    }
+    if (!validateEmailFormat(trimmedEmail)) {
+      setEmailError(t('settings.invalidEmail', 'Please enter a valid Google email address (e.g. admin@gmail.com).'));
+      return;
+    }
+
+    setEmailError('');
+    backupService.setTargetEmail(trimmedEmail);
+
     try {
       setBackupActionLoading('connect-drive');
       setMessage({ type: '', text: '' });
-      const profile = await backupService.connectGoogleDrive();
+      const profile = await backupService.connectGoogleDrive(trimmedEmail);
       setDriveProfile(profile);
+      if (profile.email) {
+        setDriveEmail(profile.email);
+      }
       setMessage({ type: 'success', text: 'Google Drive connected successfully!' });
     } catch (err) {
       if (err.message && err.message.includes('Google Client ID')) {
@@ -129,23 +153,24 @@ const Settings = () => {
   const handleDisconnectDrive = () => {
     backupService.disconnectGoogleDrive();
     setDriveProfile(null);
-    setAutoBackup(false);
     setMessage({ type: 'success', text: 'Google Drive disconnected.' });
   };
 
-  const handleToggleAutoBackup = () => {
-    const next = !autoBackup;
-    backupService.setAutoBackupEnabled(next);
-    setAutoBackup(next);
-  };
-
   const handleGoogleDriveBackup = async () => {
+    if (!driveConnected) {
+      setMessage({
+        type: 'error',
+        text: t('settings.pleaseConnectDrive', 'Please connect your Google Drive account first.'),
+      });
+      return;
+    }
+
     try {
       setBackupActionLoading('drive-backup');
       setMessage({ type: '', text: '' });
-      const res = await backupService.uploadToGoogleDrive();
+      const res = await backupService.uploadToGoogleDrive(undefined, driveEmail.trim());
       setLastBackupTime(res.uploadedAt);
-      setMessage({ type: 'success', text: `${t('settings.backupSuccess')} (${res.fileName})` });
+      setMessage({ type: 'success', text: `${t('settings.backupSuccess', 'Backup completed successfully.')} (${res.fileName})` });
     } catch (err) {
       if (err.message && err.message.includes('Google Client ID')) {
         setIsDriveSetupOpen(true);
@@ -158,10 +183,18 @@ const Settings = () => {
   };
 
   const handleOpenDriveRestore = async () => {
+    if (!driveConnected) {
+      setMessage({
+        type: 'error',
+        text: t('settings.pleaseConnectDrive', 'Please connect your Google Drive account first.'),
+      });
+      return;
+    }
+
     try {
       setDriveLoading(true);
       setIsDriveRestoreOpen(true);
-      const files = await backupService.getGoogleDriveBackups();
+      const files = await backupService.getGoogleDriveBackups(driveEmail.trim());
       setDriveBackups(files);
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Failed to load Google Drive backups.' });
@@ -171,21 +204,11 @@ const Settings = () => {
     }
   };
 
-  const handleSelectDriveBackup = async (backupItem) => {
-    try {
-      setDriveLoading(true);
-      setIsDriveRestoreOpen(false);
-      setBackupActionLoading('downloading-drive-backup');
-      await backupService.restoreFromGoogleDrive(backupItem.id);
-      await refreshUser();
-      if (triggerRefresh) triggerRefresh();
-      setMessage({ type: 'success', text: t('settings.restoreSuccess') });
-    } catch (err) {
-      setMessage({ type: 'error', text: err.message || 'Restore from Google Drive failed.' });
-    } finally {
-      setDriveLoading(false);
-      setBackupActionLoading('');
-    }
+  const handleSelectDriveBackup = (backupItem) => {
+    setIsDriveRestoreOpen(false);
+    setPendingRestoreName(backupItem.name);
+    setPendingRestoreData(backupItem);
+    setIsConfirmRestoreOpen(true);
   };
 
   const handleDownloadLocalBackup = async () => {
@@ -193,7 +216,7 @@ const Settings = () => {
       setBackupActionLoading('local-backup');
       setMessage({ type: '', text: '' });
       const fileName = await backupService.downloadLocalBackup();
-      setMessage({ type: 'success', text: `${t('settings.backupSuccess')} (${fileName})` });
+      setMessage({ type: 'success', text: `${t('settings.backupSuccess', 'Backup completed successfully.')} (${fileName})` });
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Local backup export failed.' });
     } finally {
@@ -218,7 +241,7 @@ const Settings = () => {
       const text = await file.text();
       const parsed = JSON.parse(text);
 
-      if (parsed.format !== 'bachat_gat_backup') {
+      if (!parsed || parsed.format !== 'bachat_gat_backup') {
         throw new Error('This is not a valid Bachat Gat backup file.');
       }
 
@@ -236,12 +259,16 @@ const Settings = () => {
     if (!pendingRestoreData) return;
     try {
       setBackupActionLoading('restoring');
-      await backupService.restoreBackupData(pendingRestoreData);
+      if (pendingRestoreData.id && typeof pendingRestoreData.id === 'string' && !pendingRestoreData.format) {
+        await backupService.restoreFromGoogleDrive(pendingRestoreData.id);
+      } else {
+        await backupService.restoreBackupData(pendingRestoreData);
+      }
       setIsConfirmRestoreOpen(false);
       setPendingRestoreData(null);
       await refreshUser();
       if (triggerRefresh) triggerRefresh();
-      setMessage({ type: 'success', text: t('settings.restoreSuccess') });
+      setMessage({ type: 'success', text: t('settings.restoreSuccess', 'Data restored successfully!') });
     } catch (err) {
       setMessage({ type: 'error', text: err.message || 'Restore failed.' });
     } finally {
@@ -754,181 +781,142 @@ const Settings = () => {
 
           {/* 2. BACKUP & RESTORE CARD */}
           <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div
-                  style={{
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '8px',
-                    backgroundColor: '#EFF6FF',
-                    color: '#2563EB',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <Cloud size={20} />
-                </div>
-                <div>
-                  <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
-                    {t('settings.backupAndRestore', 'BACKUP & RESTORE')}
-                  </h2>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                    Google Drive cloud synchronization and local JSON export/import
-                  </span>
-                </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px' }}>
+              <div
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '8px',
+                  backgroundColor: '#EFF6FF',
+                  color: '#2563EB',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Cloud size={20} />
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.2rem', fontWeight: 800, margin: 0 }}>
+                  {t('settings.backupAndRestore', 'Backup & Restore')}
+                </h2>
               </div>
             </div>
 
-            {/* Google Drive Status Box */}
+            {/* Google Drive Email & Status Box */}
             <div
               style={{
-                padding: '14px 16px',
+                padding: '16px 18px',
                 borderRadius: 'var(--radius-md)',
                 border: '1px solid var(--border-color)',
                 backgroundColor: '#F8FAFC',
-                marginBottom: '16px',
+                marginBottom: '20px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{t('settings.googleDrive')}</span>
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: driveConnected ? '#166534' : '#64748B',
-                      }}
-                    >
-                      <span
-                        style={{
-                          width: '6px',
-                          height: '6px',
-                          borderRadius: '50%',
-                          backgroundColor: driveConnected ? '#16A34A' : '#94A3B8',
-                        }}
-                      />
-                      {driveConnected ? t('settings.connected') : t('settings.notConnected')}
-                    </span>
-                  </div>
-
-                  {driveProfile ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px' }}>
-                      {driveProfile.picture ? (
-                        <img
-                          src={driveProfile.picture}
-                          alt="Google Profile"
-                          style={{ width: '28px', height: '28px', borderRadius: '50%' }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            width: '28px',
-                            height: '28px',
-                            borderRadius: '50%',
-                            backgroundColor: '#E2E8F0',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: '0.8rem',
-                            fontWeight: 700,
-                          }}
-                        >
-                          {driveProfile.name ? driveProfile.name[0] : 'G'}
-                        </div>
-                      )}
-                      <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                        {driveProfile.name || driveProfile.email} {driveProfile.email ? `(${driveProfile.email})` : ''}
-                      </span>
-                    </div>
-                  ) : (
-                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                      Connect your Google Drive account to backup and restore anytime.
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {driveConnected ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleConnectDrive}
-                        className="btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '0.8rem' }}
-                        disabled={!!backupActionLoading}
-                      >
-                        {t('settings.switchAccount')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleDisconnectDrive}
-                        className="btn-secondary"
-                        style={{ padding: '6px 12px', fontSize: '0.8rem', color: '#DC2626' }}
-                      >
-                        {t('settings.disconnectDrive')}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={handleConnectDrive}
-                      className="btn-primary"
-                      style={{ padding: '6px 14px', fontSize: '0.8rem' }}
-                      disabled={backupActionLoading === 'connect-drive'}
-                    >
-                      <Cloud size={14} />
-                      {backupActionLoading === 'connect-drive' ? t('common.loading') : t('settings.connectDrive')}
-                    </button>
-                  )}
-
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label" style={{ fontWeight: 700, marginBottom: '6px' }}>
+                  {t('settings.googleDriveEmail', 'Google Drive Email:')}
+                </label>
+                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  <input
+                    type="email"
+                    className="form-input"
+                    style={{
+                      flex: '1 1 260px',
+                      borderColor: emailError ? '#DC2626' : undefined,
+                    }}
+                    placeholder="e.g. admin@gmail.com"
+                    value={driveEmail}
+                    onChange={(e) => {
+                      setDriveEmail(e.target.value);
+                      if (emailError) setEmailError('');
+                    }}
+                  />
                   <button
                     type="button"
-                    onClick={() => setIsDriveSetupOpen(true)}
-                    className="btn-secondary"
-                    style={{ padding: '6px 10px', fontSize: '0.8rem' }}
-                    title="Configure Google OAuth Client ID"
+                    onClick={handleConnectOrSaveEmail}
+                    className="btn-primary"
+                    style={{ padding: '8px 16px', whiteSpace: 'nowrap' }}
+                    disabled={backupActionLoading === 'connect-drive'}
                   >
-                    <Sliders size={14} />
+                    <Cloud size={16} />
+                    {backupActionLoading === 'connect-drive'
+                      ? t('common.loading')
+                      : t('settings.connectSaveEmail', 'Connect / Save Email')}
                   </button>
+                  {driveConnected && (
+                    <button
+                      type="button"
+                      onClick={handleDisconnectDrive}
+                      className="btn-secondary"
+                      style={{ padding: '8px 12px', color: '#DC2626', borderColor: '#FECACA' }}
+                    >
+                      {t('settings.disconnectDrive', 'Disconnect')}
+                    </button>
+                  )}
                 </div>
+                {emailError && (
+                  <p style={{ fontSize: '0.8rem', color: '#DC2626', marginTop: '6px', marginBottom: 0 }}>
+                    {emailError}
+                  </p>
+                )}
               </div>
 
-              {/* Last backup info */}
+              {/* Status and Last Backup Row */}
               <div
                 style={{
-                  marginTop: '12px',
-                  paddingTop: '10px',
-                  borderTop: '1px solid var(--border-color)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  fontSize: '0.8rem',
-                  color: 'var(--text-secondary)',
+                  paddingTop: '12px',
+                  borderTop: '1px solid var(--border-color)',
+                  flexWrap: 'wrap',
+                  gap: '10px',
                 }}
               >
-                <span>
-                  {t('settings.lastBackup')}:{' '}
-                  <strong style={{ color: 'var(--text-primary)' }}>
-                    {lastBackupTime ? new Date(lastBackupTime).toLocaleString() : t('settings.never')}
-                  </strong>
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                    {t('settings.statusLabel', 'Status:')}
+                  </span>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      padding: '3px 10px',
+                      borderRadius: '16px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      backgroundColor: driveConnected ? '#DCFCE7' : '#F1F5F9',
+                      color: driveConnected ? '#166534' : '#64748B',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        backgroundColor: driveConnected ? '#16A34A' : '#94A3B8',
+                      }}
+                    />
+                    {driveConnected ? t('settings.connected', 'Connected') : t('settings.notConnected', 'Not Connected')}
+                  </span>
+                  {driveConnected && driveProfile?.email && (
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                      ({driveProfile.email})
+                    </span>
+                  )}
+                </div>
 
-                {/* 2-Day Auto Backup Toggle */}
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={autoBackup}
-                    onChange={handleToggleAutoBackup}
-                    style={{ cursor: 'pointer' }}
-                  />
-                  <span style={{ fontWeight: 600 }}>{t('settings.autoBackup')}</span>
-                </label>
+                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                  {t('settings.lastBackup', 'Last Backup')}:{' '}
+                  <strong style={{ color: 'var(--text-primary)' }}>
+                    {lastBackupTime ? new Date(lastBackupTime).toLocaleString() : t('settings.never', 'Never')}
+                  </strong>
+                </div>
               </div>
             </div>
 
@@ -936,7 +924,7 @@ const Settings = () => {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
                 gap: '12px',
               }}
             >
@@ -944,22 +932,22 @@ const Settings = () => {
                 type="button"
                 className="btn-primary"
                 onClick={handleGoogleDriveBackup}
-                disabled={!driveConnected || !!backupActionLoading}
-                style={{ padding: '10px 14px', justifyContent: 'center' }}
+                disabled={!!backupActionLoading}
+                style={{ padding: '12px 16px', justifyContent: 'center' }}
               >
                 <CloudUpload size={16} />
-                {backupActionLoading === 'drive-backup' ? t('settings.uploadingBackup') : t('settings.backupNow')}
+                {backupActionLoading === 'drive-backup' ? t('settings.uploadingBackup', 'Backing up...') : t('settings.backupNow', 'Backup Now')}
               </button>
 
               <button
                 type="button"
                 className="btn-secondary"
                 onClick={handleOpenDriveRestore}
-                disabled={!driveConnected || !!backupActionLoading}
-                style={{ padding: '10px 14px', justifyContent: 'center' }}
+                disabled={!!backupActionLoading}
+                style={{ padding: '12px 16px', justifyContent: 'center' }}
               >
                 <CloudDownload size={16} />
-                {driveLoading ? t('common.loading') : t('settings.restore')}
+                {driveLoading ? t('common.loading') : t('settings.restore', 'Restore')}
               </button>
 
               <button
@@ -967,10 +955,10 @@ const Settings = () => {
                 className="btn-secondary"
                 onClick={handleDownloadLocalBackup}
                 disabled={!!backupActionLoading}
-                style={{ padding: '10px 14px', justifyContent: 'center' }}
+                style={{ padding: '12px 16px', justifyContent: 'center' }}
               >
                 <Download size={16} />
-                {backupActionLoading === 'local-backup' ? t('common.loading') : t('settings.localBackup')}
+                {backupActionLoading === 'local-backup' ? t('common.loading') : t('settings.localBackup', 'Download Backup')}
               </button>
 
               <button
@@ -978,10 +966,10 @@ const Settings = () => {
                 className="btn-secondary"
                 onClick={handleRestoreFromFileClick}
                 disabled={!!backupActionLoading}
-                style={{ padding: '10px 14px', justifyContent: 'center' }}
+                style={{ padding: '12px 16px', justifyContent: 'center' }}
               >
                 <Upload size={16} />
-                {t('settings.restoreFromFile')}
+                {t('settings.restoreFromFile', 'Restore from File')}
               </button>
             </div>
 

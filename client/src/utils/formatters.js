@@ -359,6 +359,24 @@ export function calculateMonthlyMemberStatus({
       return false;
     }
 
+    // Safety: Ensure payment belongs to THIS member (not a prior member from before creation)
+    if (member.createdAt && p.createdAt) {
+      const memberCreatedTime = new Date(member.createdAt).getTime();
+      const paymentCreatedTime = new Date(p.createdAt).getTime();
+      // If payment was recorded more than 1 minute before this member was created in the system, it's historical
+      if (!isNaN(memberCreatedTime) && !isNaN(paymentCreatedTime) && paymentCreatedTime < memberCreatedTime - 60000) {
+        return false;
+      }
+    }
+
+    const memberNameClean = String(member.name || member.fullName || '').trim().toLowerCase();
+    const pMemberNameClean = String(p.memberName || p.member_name || '').trim().toLowerCase();
+    if (memberNameClean && pMemberNameClean && pMemberNameClean !== 'member' && memberNameClean !== 'member') {
+      if (memberNameClean !== pMemberNameClean && !memberNameClean.includes(pMemberNameClean) && !pMemberNameClean.includes(memberNameClean)) {
+        return false;
+      }
+    }
+
     return isMonthlySavingPaid(p, requiredAmount);
   });
 

@@ -104,9 +104,18 @@ export const memberService = {
    */
   getNextMemberCode: async (groupId = DEFAULT_GROUP_ID) => {
     const targetGroupId = groupId || DEFAULT_GROUP_ID;
-    const membersSnap = await getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] }));
+    const [membersSnap, counterSnap, contribsSnap, loansSnap, settlementsSnap] = await Promise.all([
+      getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
+      getDoc(doc(db, 'groups', targetGroupId, 'system', 'member_counter')).catch(() => null),
+      getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+      getDocs(collection(db, 'groups', targetGroupId, 'settlements')).catch(() => ({ docs: [] })),
+    ]);
+
     let maxNumber = 0;
-    membersSnap.docs.filter((d) => isNonAdminMember(d.data())).forEach((memberDoc) => {
+
+    // 1. Scan member documents (active, inactive, archived)
+    membersSnap.docs.forEach((memberDoc) => {
       const data = memberDoc.data();
       const candidates = [memberDoc.id, data.memberCode, data.member_code, data.memberId, data.member_id];
       candidates.forEach((value) => {
@@ -117,7 +126,68 @@ export const memberService = {
       });
     });
 
-    const nextNumber = maxNumber + 1;
+    // 2. Scan system member counter
+    if (counterSnap && counterSnap.exists()) {
+      const cData = counterSnap.data();
+      const lastNum = parseInt(cData.lastNumber || cData.last_number || 0, 10);
+      if (!isNaN(lastNum) && lastNum > maxNumber) {
+        maxNumber = lastNum;
+      }
+    }
+
+    // 3. Scan historical monthly contributions to prevent ID collisions with past payments
+    contribsSnap.docs.forEach((d) => {
+      const data = d.data();
+      const candidates = [d.id, data.memberId, data.member_id, data.memberCode, data.member_code];
+      candidates.forEach((value) => {
+        const num = memberService.parseMemberNumber(value);
+        if (num !== null && num > maxNumber) {
+          maxNumber = num;
+        }
+      });
+    });
+
+    // 4. Scan loans
+    loansSnap.docs.forEach((d) => {
+      const data = d.data();
+      const candidates = [d.id, data.memberId, data.member_id, data.memberCode, data.member_code];
+      candidates.forEach((value) => {
+        const num = memberService.parseMemberNumber(value);
+        if (num !== null && num > maxNumber) {
+          maxNumber = num;
+        }
+      });
+    });
+
+    // 5. Scan settlements
+    settlementsSnap.docs.forEach((d) => {
+      const data = d.data();
+      const candidates = [d.id, data.memberId, data.member_id];
+      candidates.forEach((value) => {
+        const num = memberService.parseMemberNumber(value);
+        if (num !== null && num > maxNumber) {
+          maxNumber = num;
+        }
+      });
+    });
+
+    let nextNumber = maxNumber + 1;
+
+    // Build sets of all existing IDs to guarantee absolute uniqueness with zero collisions
+    const existingMemberIds = new Set(membersSnap.docs.map((d) => d.id));
+    const existingContribMemberIds = new Set(contribsSnap.docs.map((d) => {
+      const data = d.data();
+      return String(data.memberId || data.member_id || d.id);
+    }));
+
+    while (
+      existingMemberIds.has(`M_${nextNumber}`) ||
+      existingMemberIds.has(`M-${nextNumber}`) ||
+      existingContribMemberIds.has(`M_${nextNumber}`) ||
+      existingContribMemberIds.has(`M-${nextNumber}`)
+    ) {
+      nextNumber++;
+    }
 
     return {
       success: true,
@@ -544,9 +614,9 @@ export const memberService = {
       batch.set(doc(db, 'groups', targetGroupId, 'members', newMemberId), newMemberPayload);
       batch.set(doc(db, 'groups', targetGroupId, 'activities', actId), {
         id: actId,
-        type: 'adjustment',
-        amount: newMemberPayload.monthlyContribution,
-        description: `Member added: ${cleanName} (Shares: ${newMemberPayload.shares}, Hafta: ₹${newMemberPayload.monthlyContribution})`,
+        type: 'member_registration',
+        amount: 0,
+        description: `Member registered: ${cleanName} (${newMemberCode})`,
         memberId: newMemberId,
         memberName: cleanName,
         referenceId: newMemberId,

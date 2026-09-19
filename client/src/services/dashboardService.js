@@ -134,7 +134,9 @@ export const dashboardService = {
         return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
       }, 0);
 
-      const totalSavings = Math.max(0, liveSavingsTotal - totalSettledSavings);
+      // liveSavingsTotal represents the canonical member savings of current active regular members.
+      // Do NOT subtract totalSettledSavings again, as departed members' savings are already excluded from active members.
+      const totalSavings = liveSavingsTotal;
       const memberContributions = totalSavings;
 
       // 2. Map Repayments by Loan ID
@@ -240,6 +242,8 @@ export const dashboardService = {
           groupCode,
           memberContributions,
           totalSavings,
+          totalSettledSavings,
+          total_settled_savings: totalSettledSavings,
           totalGroupFund,
           activeLoans,
           activeLoansCount,

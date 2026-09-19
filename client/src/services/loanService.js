@@ -15,19 +15,45 @@ import {
   normalizeLoan,
   normalizeMember,
   normalizeSavings,
+  isRegularMember,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
 
 export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_ID) {
   const targetGroupId = groupId || DEFAULT_GROUP_ID;
-  const [contributionsSnap, loansSnap, repaymentsSnap, settlementsSnap] = await Promise.all([
+  const [contributionsSnap, loansSnap, repaymentsSnap, settlementsSnap, membersSnap] = await Promise.all([
     getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] })),
     getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
     getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
     getDocs(collection(db, 'groups', targetGroupId, 'settlements')).catch(() => ({ docs: [] })),
+    getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
   ]);
 
-  const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+  const regularMemberDocs = (membersSnap && membersSnap.docs)
+    ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
+    : [];
+  const validMemberIdSet = new Set();
+  regularMemberDocs.forEach((d) => {
+    validMemberIdSet.add(d.id);
+    const mData = d.data();
+    if (mData.memberCode) validMemberIdSet.add(mData.memberCode);
+    if (mData.member_code) validMemberIdSet.add(mData.member_code);
+    if (mData.userId) validMemberIdSet.add(mData.userId);
+    if (mData.authUid) validMemberIdSet.add(mData.authUid);
+    const cleanId = d.id.toLowerCase().replace(/[-_]/g, '');
+    if (cleanId) validMemberIdSet.add(cleanId);
+  });
+
+  const allSavings = contributionsSnap.docs
+    .map((d) => normalizeSavings(d.id, d.data()))
+    .filter((c) => {
+      const mId = String(c.memberId || c.member_id || '');
+      const mCode = String(c.memberCode || c.member_code || '');
+      const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+      const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+      return validMemberIdSet.has(mId) || validMemberIdSet.has(mCode) || validMemberIdSet.has(cleanId) || validMemberIdSet.has(cleanCode);
+    });
+
   const grossSavings = allSavings
     .filter((c) => c.isPaid || c.paidAmount > 0)
     .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
@@ -39,7 +65,9 @@ export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_I
     return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
   }, 0);
 
-  const totalSavings = Math.max(0, grossSavings - totalSettledSavings);
+  // grossSavings represents canonical savings of active regular members.
+  // Do NOT subtract totalSettledSavings again, as departed members' savings are already excluded from active members.
+  const totalSavings = grossSavings;
 
   const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
   const repaymentsByLoan = {};

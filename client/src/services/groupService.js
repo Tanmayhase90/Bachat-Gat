@@ -87,7 +87,9 @@ export const groupService = {
         return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
       }, 0);
 
-      const totalSavings = Math.max(0, grossSavings - totalSettledSavings);
+      // grossSavings represents canonical savings of active regular members.
+      // Do NOT subtract totalSettledSavings again, as departed members' savings are already excluded from active members.
+      const totalSavings = grossSavings;
 
       // 3. Loans & Repayments
       const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));

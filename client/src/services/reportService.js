@@ -165,7 +165,9 @@ export const reportService = {
         return sum + Number(data.lifetimeSavings || data.lifetime_savings || 0);
       }, 0);
 
-      const totalSavings = Math.max(0, grossSavings - totalSettledSavings);
+      // grossSavings represents canonical savings of active regular members.
+      // Do NOT subtract totalSettledSavings again, as departed members' savings are already excluded from active members.
+      const totalSavings = grossSavings;
 
       let allLoansInterest = loansList.reduce((sum, l) => sum + (l.totalInterestPaid || 0), 0);
       const matchedLoanIds = new Set(loansList.map((l) => l.id).concat(loansList.map((l) => l.loanId)));

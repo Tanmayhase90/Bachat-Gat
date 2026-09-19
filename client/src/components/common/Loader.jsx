@@ -1,7 +1,10 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
-const Loader = ({ fullScreen = false, text = 'Loading...' }) => {
+const Loader = ({ fullScreen = false, text }) => {
+  const { t } = useLanguage();
+  const displayText = text !== undefined ? text : t('common.loading', 'Loading...');
   if (fullScreen) {
     return (
       <div style={{
@@ -20,7 +23,7 @@ const Loader = ({ fullScreen = false, text = 'Loading...' }) => {
         gap: '12px'
       }}>
         <Loader2 className="animate-spin" size={42} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
-        <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{text}</span>
+        <span style={{ fontWeight: 600, color: 'var(--text-secondary)', fontSize: '0.95rem' }}>{displayText}</span>
         <style>{`
           @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         `}</style>
@@ -31,7 +34,7 @@ const Loader = ({ fullScreen = false, text = 'Loading...' }) => {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: '10px' }}>
       <Loader2 size={32} color="var(--primary)" style={{ animation: 'spin 1s linear infinite' }} />
-      <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>{text}</span>
+      <span style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', fontWeight: 500 }}>{displayText}</span>
       <style>{`
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
       `}</style>

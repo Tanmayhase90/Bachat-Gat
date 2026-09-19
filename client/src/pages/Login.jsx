@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { authService } from '../services/authService';
+import LanguageDropdown from '../components/common/LanguageDropdown';
 import { Lock, Mail, ArrowRight, ShieldCheck, AlertCircle, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 
 const Login = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { login } = useAuth();
+  const { t, language } = useLanguage();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +34,7 @@ const Login = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password) {
-      setError('Please provide both admin email and password.');
+      setError(t('auth.errorEmailPasswordRequired', 'Please provide both admin email and password.'));
       return;
     }
 
@@ -43,7 +46,7 @@ const Login = () => {
       await login(email.trim(), password, 'admin');
       navigate('/dashboard', { replace: true });
     } catch (err) {
-      setError(err.message || 'Login failed. Please check your admin credentials.');
+      setError(err.message || t('auth.loginFailed', 'Login failed. Please check your admin credentials.'));
     } finally {
       setLoading(false);
     }
@@ -52,7 +55,7 @@ const Login = () => {
   const handleForgotPassword = async () => {
     if (!email.trim()) {
       setSuccessInfo('');
-      setError('Please enter your admin email address first.');
+      setError(t('auth.errorEmailRequiredForReset', 'Please enter your admin email address first.'));
       return;
     }
 
@@ -63,7 +66,7 @@ const Login = () => {
       const result = await authService.sendPasswordReset(email);
       setSuccessInfo(result.message);
     } catch (err) {
-      setError(err.message || 'Unable to send password reset email.');
+      setError(err.message || t('auth.resetFailed', 'Unable to send password reset email.'));
     } finally {
       setResetLoading(false);
     }
@@ -82,6 +85,11 @@ const Login = () => {
         overflow: 'hidden',
       }}
     >
+      {/* Language Switcher in top right */}
+      <div style={{ position: 'absolute', top: '20px', right: '20px', zIndex: 10 }}>
+        <LanguageDropdown />
+      </div>
+
       {/* Background subtle glowing circles */}
       <div
         style={{
@@ -143,7 +151,7 @@ const Login = () => {
             ₹
           </div>
           <h1 style={{ fontSize: '1.65rem', fontWeight: 800, color: 'var(--primary)' }}>
-            Bachat Gat
+            {t('common.appName', 'Bachat Gat')}
           </h1>
           <div
             style={{
@@ -160,10 +168,10 @@ const Login = () => {
               letterSpacing: '0.03em',
             }}
           >
-            <ShieldCheck size={14} /> ADMIN MANAGEMENT PORTAL
+            <ShieldCheck size={14} /> {t('auth.adminPortalTitle', 'ADMIN MANAGEMENT PORTAL')}
           </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.875rem', marginTop: '8px' }}>
-            Sign in to access administrator management panel
+            {t('auth.adminPortalSubtitle', 'Sign in to access administrator management panel')}
           </p>
         </div>
 
@@ -213,7 +221,7 @@ const Login = () => {
         >
           <div className="form-group">
             <label className="form-label" htmlFor="login_email_input">
-              Admin Email ID
+              {t('auth.adminEmail', 'Admin Email ID')}
             </label>
             <div style={{ position: 'relative' }}>
               <Mail
@@ -230,7 +238,7 @@ const Login = () => {
                 spellCheck="false"
                 className="form-input"
                 style={{ paddingLeft: '38px' }}
-                placeholder="admin@example.com"
+                placeholder={t('auth.adminEmailPlaceholder', 'admin@example.com')}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -241,7 +249,7 @@ const Login = () => {
           <div className="form-group">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
               <label className="form-label" htmlFor="login_password_input">
-                Admin Password
+                {t('auth.adminPassword', 'Admin Password')}
               </label>
               <button
                 type="button"
@@ -255,7 +263,7 @@ const Login = () => {
                   padding: '2px 0',
                 }}
               >
-                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+                {resetLoading ? t('auth.sending', 'Sending...') : t('auth.forgotPassword', 'Forgot Password?')}
               </button>
             </div>
             <div style={{ position: 'relative' }}>
@@ -271,7 +279,7 @@ const Login = () => {
                 autoComplete="new-password"
                 className="form-input"
                 style={{ paddingLeft: '38px', paddingRight: '40px' }}
-                placeholder="Enter admin password"
+                placeholder={t('auth.adminPasswordPlaceholder', 'Enter admin password')}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -305,13 +313,13 @@ const Login = () => {
             disabled={loading}
             style={{ width: '100%', padding: '12px', marginTop: '14px', fontSize: '0.95rem' }}
           >
-            {loading ? 'Authenticating Admin...' : 'Sign In to Admin Portal'}
+            {loading ? t('auth.signingIn', 'Authenticating Admin...') : t('auth.signInBtn', 'Sign In to Admin Portal')}
             {!loading && <ArrowRight size={18} />}
           </button>
         </form>
 
         <div style={{ textAlign: 'center', marginTop: '24px', paddingTop: '16px', borderTop: '1px solid var(--border-color)', fontSize: '0.775rem', color: 'var(--text-muted)' }}>
-          Secure Admin Management Portal • Bachat Gat 2026
+          {t('auth.secureAdminPortalFooter', 'Secure Admin Management Portal • Bachat Gat 2026')}
         </div>
       </div>
     </div>

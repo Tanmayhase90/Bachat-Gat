@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 
 const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null }) => {
-  const { language } = useLanguage();
+  const { language, t } = useLanguage();
   const currentDate = new Date();
 
   const [activeLoans, setActiveLoans] = useState([]);
@@ -956,10 +956,10 @@ const RecordRepaymentModal = ({ isOpen, onClose, onSuccess, initialLoanId = null
               <div className="form-group">
                 <label className="form-label">{language === 'mr' ? 'पेमेंट पद्धत' : 'Payment Mode'}</label>
                 <select name="payment_mode" className="form-select" value={formData.payment_mode} onChange={handleChange} tabIndex={0}>
-                  <option value="CASH">{language === 'mr' ? 'रोख (Cash)' : 'Cash'}</option>
-                  <option value="UPI">{language === 'mr' ? 'UPI / QR Code' : 'UPI / QR Code'}</option>
-                  <option value="BANK_TRANSFER">{language === 'mr' ? 'बँक ट्रान्सफर (Bank Transfer)' : 'Bank Transfer'}</option>
-                  <option value="CHEQUE">{language === 'mr' ? 'धनादेश (Cheque)' : 'Cheque'}</option>
+                  <option value="CASH">{t('common.cash', 'Cash')}</option>
+                  <option value="UPI">{language === 'mr' ? 'यूपीआय / क्यूआर कोड' : 'UPI / QR Code'}</option>
+                  <option value="BANK_TRANSFER">{t('common.bankTransfer', 'Bank Transfer')}</option>
+                  <option value="CHEQUE">{t('common.cheque', 'Cheque')}</option>
                 </select>
               </div>
             </div>

@@ -39,7 +39,7 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
       maxWidth="520px"
       footer={
         <button onClick={onClose} className="btn-secondary">
-          Close
+          {t('common.close', 'Close')}
         </button>
       }
     >
@@ -82,7 +82,7 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
                 {getGroupName(group.group_name || group.groupName)}
               </h3>
               <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Tag size={12} /> ID: <code style={{ fontWeight: 600 }}>{group.group_code || group.groupCode || DEFAULT_GROUP_ID}</code>
+                <Tag size={12} /> {t('groupInfo.idLabel', 'ID:')} <code style={{ fontWeight: 600 }}>{group.group_code || group.groupCode || DEFAULT_GROUP_ID}</code>
               </div>
             </div>
           </div>
@@ -90,48 +90,48 @@ const GroupInfoModal = ({ isOpen, onClose }) => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                <ShieldCheck size={14} color="var(--primary)" /> MONTHLY SHARE
+                <ShieldCheck size={14} color="var(--primary)" /> {t('groupInfo.monthlyShare', 'MONTHLY SHARE')}
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
                 {formatCurrency(group.monthly_contribution_per_share || group.monthlyContribution || 1000)}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>per share / member</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('groupInfo.perShareMember', 'per share / member')}</span>
             </div>
 
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                <Target size={14} color="var(--success)" /> MONTHLY TARGET
+                <Target size={14} color="var(--success)" /> {t('groupInfo.monthlyTarget', 'MONTHLY TARGET')}
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
                 {formatCurrency(group.monthly_target || group.monthlyTarget || ((group.total_active_members || group.totalActiveMembers || 0) * (group.monthly_contribution_per_share || group.monthlyContribution || 1000)) || 0)}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>group goal</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('groupInfo.groupGoal', 'group goal')}</span>
             </div>
 
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                <Users size={14} color="var(--info)" /> TOTAL MEMBERS
+                <Users size={14} color="var(--info)" /> {t('groupInfo.totalMembers', 'TOTAL MEMBERS')}
               </div>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
-                {formatNumber(group.total_active_members || group.totalActiveMembers)} Active
+                {formatNumber(group.total_active_members || group.totalActiveMembers)} {t('common.active', 'Active')}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>out of {formatNumber(group.total_members || group.totalMembers)} registered</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('groupInfo.outOfRegistered', 'out of {count} registered', { count: formatNumber(group.total_members || group.totalMembers) })}</span>
             </div>
 
             <div className="card" style={{ padding: '14px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 600 }}>
-                <Calendar size={14} color="var(--warning)" /> CREATED DATE
+                <Calendar size={14} color="var(--warning)" /> {t('groupInfo.createdDate', 'CREATED DATE')}
               </div>
               <div style={{ fontSize: '0.95rem', fontWeight: 700, marginTop: '4px', color: 'var(--text-primary)' }}>
                 {formatDate(group.created_at || group.createdAt)}
               </div>
-              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>Admin: {group.created_by_name || group.createdByName || 'Admin'}</span>
+              <span style={{ fontSize: '0.7rem', color: 'var(--text-secondary)' }}>{t('groupInfo.adminPrefix', 'Admin:')} {group.created_by_name || group.createdByName || 'Admin'}</span>
             </div>
           </div>
 
           {group.description && (
             <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', background: '#F8FAFC', padding: '12px', borderRadius: 'var(--radius-md)' }}>
-              <strong>Description:</strong> {group.description}
+              <strong>{t('groupInfo.descriptionLabel', 'Description:')}</strong> {group.description}
             </div>
           )}
         </div>

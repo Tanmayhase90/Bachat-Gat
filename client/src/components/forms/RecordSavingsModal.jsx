@@ -742,8 +742,8 @@ const RecordSavingsModal = ({
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label className="form-label">{t('modals.paymentMode', 'Payment Mode')}</label>
             <select name="payment_mode" className="form-select" value={formData.payment_mode} onChange={handleChange}>
-              <option value="CASH">{language === 'mr' ? 'रोख (Cash)' : 'Cash'}</option>
-              <option value="UPI">UPI / QR Code</option>
+              <option value="CASH">{t('common.cash', 'Cash')}</option>
+              <option value="UPI">{language === 'mr' ? 'यूपीआय / क्यूआर कोड' : 'UPI / QR Code'}</option>
             </select>
           </div>
         </div>

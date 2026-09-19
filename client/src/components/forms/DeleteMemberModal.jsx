@@ -4,6 +4,7 @@ import { memberService } from '../../services/memberService';
 import { loanService } from '../../services/loanService';
 import { savingsService } from '../../services/savingsService';
 import { formatCurrency } from '../../utils/formatters';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   AlertTriangle,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [processingPayment, setProcessingPayment] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -35,7 +37,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
       setBalanceData(data);
     } catch (err) {
       console.error('Failed to load member financial balance:', err);
-      setError(err.message || 'Failed to calculate account balance.');
+      setError(err.message || t('deleteMemberModal.calculatingBalance', 'Failed to calculate account balance.'));
     } finally {
       setLoading(false);
     }
@@ -79,12 +81,12 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
         }
       }
 
-      setSuccessMsg('All loan dues settled successfully! Account balance is now clear. Please review and confirm final deletion.');
+      setSuccessMsg(t('deleteMemberModal.settleSuccessMsg', 'All loan dues settled successfully! Account balance is now clear. Please review and confirm final deletion.'));
       // Refresh balance data (do NOT automatically delete)
       await fetchBalance();
     } catch (err) {
       console.error('Failed to settle dues:', err);
-      setError(err.message || 'Failed to settle remaining dues.');
+      setError(err.message || t('deleteMemberModal.settleFailMsg', 'Failed to settle remaining dues.'));
     } finally {
       setProcessingPayment(false);
     }
@@ -92,7 +94,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
 
   const handleOpenSecondConfirm = () => {
     if (!balanceData?.isClear) {
-      setError('Cannot delete member: Outstanding dues must be settled first.');
+      setError(t('deleteMemberModal.blockedCannotDelete', 'Cannot delete member: Outstanding dues must be settled first.'));
       return;
     }
     setError('');
@@ -103,7 +105,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     if (deleting) return;
     if (!balanceData?.isClear) {
       setShowSecondConfirm(false);
-      setError('Cannot delete member: Outstanding dues must be settled first.');
+      setError(t('deleteMemberModal.blockedCannotDelete', 'Cannot delete member: Outstanding dues must be settled first.'));
       return;
     }
     const memberId = member.id || member.member_id;
@@ -120,7 +122,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
       }
     } catch (err) {
       console.error('Failed to delete member:', err);
-      setError(err.message || 'Failed to delete member.');
+      setError(err.message || t('deleteMemberModal.deleteFailMsg', 'Failed to delete member.'));
       setShowSecondConfirm(false);
     } finally {
       setDeleting(false);
@@ -129,7 +131,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
 
   if (!isOpen) return null;
 
-  const memberName = member?.name || member?.fullName || 'Member';
+  const memberName = member?.name || member?.fullName || t('common.member', 'Member');
   const memberCode = member?.memberCode || member?.member_code || member?.id;
 
   return (
@@ -137,7 +139,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
       <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Delete Member Account"
+      title={t('deleteMemberModal.title', 'Delete Member Account')}
       maxWidth="560px"
       dialogStyle={{ maxHeight: 'min(calc(100dvh - 100px), calc(100vh - 100px), 70vh)' }}
       footer={
@@ -149,7 +151,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
             disabled={processingPayment || deleting}
             style={{ padding: '10px 18px', fontSize: '0.875rem' }}
           >
-            Cancel / Close
+            {t('deleteMemberModal.cancelClose', 'Cancel / Close')}
           </button>
           {balanceData && !balanceData.isClear && (
             <button
@@ -169,12 +171,12 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
               {processingPayment ? (
                 <>
                   <Loader2 className="spinner" size={16} />
-                  <span>Settling All Dues...</span>
+                  <span>{t('deleteMemberModal.settlingAllDues', 'Settling All Dues...')}</span>
                 </>
               ) : (
                 <>
                   <Receipt size={16} />
-                  <span>Collect & Settle Remaining Dues ({formatCurrency(balanceData.totalPayable)})</span>
+                  <span>{t('deleteMemberModal.settleRemainingDues', { amount: formatCurrency(balanceData.totalPayable) })}</span>
                 </>
               )}
             </button>
@@ -200,7 +202,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
               }}
             >
               <Trash2 size={16} />
-              <span>Confirm & Delete Member Permanently</span>
+              <span>{t('deleteMemberModal.confirmDeletePermanently', 'Confirm & Delete Member Permanently')}</span>
             </button>
           )}
         </>
@@ -237,7 +239,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
           <div style={{ flex: 1 }}>
             <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>{memberName}</h4>
             <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
-              Member Code: <strong style={{ color: 'var(--text-primary)' }}>{memberCode}</strong>
+              {t('deleteMemberModal.memberCode', { code: memberCode })}
             </span>
           </div>
         </div>
@@ -286,7 +288,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
             <Loader2 className="spinner" size={32} style={{ color: 'var(--primary)', margin: '0 auto 12px' }} />
             <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
-              Calculating real-time financial balance...
+              {t('deleteMemberModal.calculatingBalance', 'Calculating real-time financial balance...')}
             </p>
           </div>
         ) : balanceData ? (
@@ -309,9 +311,9 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                 >
                   <ShieldAlert size={20} style={{ flexShrink: 0, marginTop: '2px' }} />
                   <div>
-                    <strong>Action Blocked: Outstanding Dues Exist</strong>
+                    <strong>{t('deleteMemberModal.actionBlockedTitle', 'Action Blocked: Outstanding Dues Exist')}</strong>
                     <p style={{ margin: '4px 0 0', fontSize: '0.84rem' }}>
-                      This member has unpaid financial obligations. In accordance with Bachat Gat rules, all loan principal, interest, and pending monthly savings must be settled before the account can be deleted.
+                      {t('deleteMemberModal.actionBlockedDesc')}
                     </p>
                   </div>
                 </div>
@@ -326,20 +328,20 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                   }}
                 >
                   <h5 style={{ margin: '0 0 12px', fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                    Outstanding Financial Breakdown
+                    {t('deleteMemberModal.outstandingBreakdown', 'Outstanding Financial Breakdown')}
                   </h5>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Loan Principal Outstanding:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('deleteMemberModal.loanPrincipalOutstanding', 'Loan Principal Outstanding:')}</span>
                       <strong style={{ color: 'var(--danger)' }}>{formatCurrency(balanceData.totalOutstandingPrincipal)}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Pending Loan Interest:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('deleteMemberModal.pendingLoanInterest', 'Pending Loan Interest:')}</span>
                       <strong style={{ color: 'var(--warning)' }}>{formatCurrency(balanceData.totalOutstandingInterest)}</strong>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Pending Monthly Savings / Dues:</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('deleteMemberModal.pendingMonthlySavings', 'Pending Monthly Savings / Dues:')}</span>
                       <strong style={{ color: 'var(--warning)' }}>{formatCurrency(balanceData.pendingSavings)}</strong>
                     </div>
 
@@ -354,7 +356,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                         fontWeight: 700,
                       }}
                     >
-                      <span>Total Amount Payable:</span>
+                      <span>{t('deleteMemberModal.totalAmountPayable', 'Total Amount Payable:')}</span>
                       <span style={{ color: 'var(--danger)' }}>{formatCurrency(balanceData.totalPayable)}</span>
                     </div>
                   </div>
@@ -364,7 +366,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                 {balanceData.activeLoans && balanceData.activeLoans.length > 0 && (
                   <div>
                     <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase' }}>
-                      Active Loans ({balanceData.activeLoans.length})
+                      {t('deleteMemberModal.activeLoansCount', { count: balanceData.activeLoans.length })}
                     </span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
                       {balanceData.activeLoans.map((l, idx) => (
@@ -382,16 +384,16 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                           }}
                         >
                           <div>
-                            <strong>Loan #{l.loanNumber || l.loan_number || l.id}</strong>
+                            <strong>{t('deleteMemberModal.loanNumberItem', { num: l.loanNumber || l.loan_number || l.id })}</strong>
                             <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-                              Interest Rate: {l.interestRate || l.interest_rate || 2}% / mo
+                              {t('deleteMemberModal.interestRatePerMonth', { rate: l.interestRate || l.interest_rate || 2 })}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <div style={{ fontWeight: 600, color: 'var(--danger)' }}>
                               {formatCurrency(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.outstandingAmount || 0))}
                             </div>
-                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>principal</div>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)' }}>{t('deleteMemberModal.principalLabel', 'principal')}</div>
                           </div>
                         </div>
                       ))}
@@ -416,10 +418,10 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                   <CheckCircle2 size={24} style={{ color: 'var(--success)', flexShrink: 0, marginTop: '2px' }} />
                   <div>
                     <h5 style={{ margin: '0 0 4px', color: 'var(--success)', fontSize: '0.95rem', fontWeight: 600 }}>
-                      Financial Clearance: 100% CLEAR (₹0 Dues)
+                      {t('deleteMemberModal.clearanceTitle', 'Financial Clearance: 100% CLEAR (₹0 Dues)')}
                     </h5>
                     <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                      All loans and financial obligations for <strong>{memberName}</strong> are fully paid and settled. This account is eligible for deletion.
+                      {t('deleteMemberModal.clearanceDesc', { name: memberName })}
                     </p>
                   </div>
                 </div>
@@ -436,21 +438,24 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '14px' }}>
                     <PiggyBank size={18} style={{ color: 'var(--primary)' }} />
                     <h5 style={{ margin: 0, fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                      Final Settlement & Payout
+                      {t('deleteMemberModal.finalSettlementTitle', 'Final Settlement & Payout')}
                     </h5>
                   </div>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '0.88rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: 'var(--text-secondary)' }}>Lifetime Savings</span>
+                      <span style={{ color: 'var(--text-secondary)' }}>{t('deleteMemberModal.lifetimeSavings', 'Lifetime Savings')}</span>
                       <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(balanceData.lifetimeSavings || 0)}</strong>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <span style={{ color: 'var(--text-secondary)' }}>+ Interest Share</span>
+                        <span style={{ color: 'var(--text-secondary)' }}>{t('deleteMemberModal.interestShare', '+ Interest Share')}</span>
                         <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                          ({formatCurrency(balanceData.totalGroupInterest || 0)} ÷ {balanceData.totalGroupMembers || 1} total members)
+                          {t('deleteMemberModal.interestShareFormula', {
+                            interest: formatCurrency(balanceData.totalGroupInterest || 0),
+                            members: balanceData.totalGroupMembers || 1
+                          })}
                         </div>
                       </div>
                       <strong style={{ color: 'var(--success)' }}>+{formatCurrency(balanceData.memberInterestShare || 0)}</strong>
@@ -468,7 +473,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                         fontWeight: 700,
                       }}
                     >
-                      <span style={{ color: 'var(--text-primary)' }}>Total Amount Payable</span>
+                      <span style={{ color: 'var(--text-primary)' }}>{t('deleteMemberModal.totalAmountPayable', 'Total Amount Payable')}</span>
                       <span style={{ color: 'var(--primary)', fontSize: '1.1rem' }}>{formatCurrency(balanceData.totalSettlementPayable || 0)}</span>
                     </div>
                   </div>
@@ -485,7 +490,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                   }}
                 >
                   <p style={{ margin: 0 }}>
-                    <strong style={{ color: 'var(--danger)' }}>Permanent Action:</strong> Deleting this member will permanently remove their profile, login credentials, and linked transaction history from the Bachat Gat system. This action cannot be undone.
+                    {t('deleteMemberModal.permanentActionNotice')}
                   </p>
                 </div>
               </div>
@@ -499,7 +504,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     <Modal
       isOpen={showSecondConfirm}
       onClose={() => !deleting && setShowSecondConfirm(false)}
-      title="Confirm Permanent Deletion"
+      title={t('deleteMemberModal.secondConfirmTitle', 'Confirm Permanent Deletion')}
       maxWidth="440px"
       overlayStyle={{ zIndex: 1100 }}
       footer={
@@ -511,7 +516,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
             disabled={deleting}
             style={{ padding: '8px 16px', fontSize: '0.875rem' }}
           >
-            Cancel
+            {t('common.cancel', 'Cancel')}
           </button>
           <button
             type="button"
@@ -535,12 +540,12 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
             {deleting ? (
               <>
                 <Loader2 className="spinner" size={16} />
-                <span>Deleting...</span>
+                <span>{t('deleteMemberModal.deletingBtn', 'Deleting...')}</span>
               </>
             ) : (
               <>
                 <Trash2 size={16} />
-                <span>Confirm Delete</span>
+                <span>{t('deleteMemberModal.confirmDeleteBtn', 'Confirm Delete')}</span>
               </>
             )}
           </button>
@@ -549,7 +554,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', padding: '4px 0' }}>
         <p style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-primary)', lineHeight: 1.5, fontWeight: 500 }}>
-          Are you sure you want to delete this member permanently?
+          {t('deleteMemberModal.secondConfirmPrompt')}
         </p>
         <div
           style={{
@@ -562,7 +567,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
             lineHeight: 1.4,
           }}
         >
-          <strong>{memberName}</strong> ({memberCode}) will be permanently removed. This action cannot be undone.
+          {t('deleteMemberModal.secondConfirmWarning', { name: memberName, code: memberCode })}
         </div>
       </div>
     </Modal>

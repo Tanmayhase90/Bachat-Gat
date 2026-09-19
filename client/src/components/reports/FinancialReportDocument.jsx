@@ -20,7 +20,7 @@ const FinancialReportDocument = ({
   selectedMonth,
   selectedYear,
 }) => {
-  const { t, getGroupName } = useLanguage();
+  const { t, getGroupName, language } = useLanguage();
 
   const monthLabel = MONTH_NAMES[selectedMonth - 1] || 'Selected Month';
   const selectedPeriodText = `${t(`common.months.${selectedMonth}`, monthLabel)} ${selectedYear}`;
@@ -49,17 +49,20 @@ const FinancialReportDocument = ({
       <div
         className="report-header"
         style={{
-          textAlign: 'center',
-          borderBottom: '2px solid var(--primary)',
+          borderBottom: '2.5px solid var(--primary)',
           paddingBottom: '20px',
-          position: 'relative',
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', marginBottom: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <div
             style={{
-              width: '36px',
-              height: '36px',
+              width: '40px',
+              height: '40px',
               borderRadius: 'var(--radius-md)',
               background: 'var(--primary-gradient)',
               color: 'white',
@@ -67,16 +70,24 @@ const FinancialReportDocument = ({
               alignItems: 'center',
               justifyContent: 'center',
               fontWeight: 800,
-              fontSize: '1.2rem',
+              fontSize: '1.25rem',
             }}
           >
             ₹
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: 'var(--primary)', letterSpacing: '-0.02em', margin: 0 }}>
+          <h1
+            style={{
+              fontSize: '1.85rem',
+              fontWeight: 800,
+              color: 'var(--primary)',
+              margin: 0,
+              letterSpacing: '-0.02em',
+            }}
+          >
             {groupNameText}
           </h1>
         </div>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 600, margin: '2px 0 8px' }}>
+        <p style={{ margin: 0, fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
           Ghargaon Stand • Registration & Accounting Management
         </p>
         <div
@@ -92,69 +103,69 @@ const FinancialReportDocument = ({
             letterSpacing: '0.05em',
           }}
         >
-          MONTHLY FINANCIAL REPORT — {selectedPeriodText}
+          {language === 'mr' ? 'मासिक आर्थिक अहवाल —' : 'MONTHLY FINANCIAL REPORT —'} {selectedPeriodText}
         </div>
       </div>
 
       {/* 2. Key Metric Financial Summary Grid */}
       <div className="report-section avoid-break">
         <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          1. Financial Performance Summary ({selectedPeriodText})
+          1. {language === 'mr' ? 'आर्थिक कामगिरी सारांश' : 'Financial Performance Summary'} ({selectedPeriodText})
         </h3>
         <div className="report-summary-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
           <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: '#F8FAFC', border: '1px solid var(--border-color)' }}>
             <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Total Savings (Month)
+              {t('reports.totalSavingsMonth', 'Total Savings (Month)')}
             </span>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
               {formatCurrency(monthlyData?.summary?.monthSavings ?? monthlyData?.summary?.totalSavingsCollected)}
             </div>
             <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
-              Target: {formatCurrency(monthlyData?.summary?.monthlyTarget)} ({monthlyData?.summary?.targetAchievement || 0}% completed)
+              {language === 'mr' ? 'उद्दिष्ट:' : 'Target:'} {formatCurrency(monthlyData?.summary?.monthlyTarget)} ({monthlyData?.summary?.targetAchievement || 0}% {language === 'mr' ? 'पूर्ण' : 'completed'})
             </span>
           </div>
 
           <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: '#F8FAFC', border: '1px solid var(--border-color)' }}>
             <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Total Interest (Month)
+              {t('reports.totalInterestMonth', 'Total Interest (Month)')}
             </span>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
               {formatCurrency(monthlyData?.summary?.monthInterest ?? monthlyData?.summary?.totalInterestCollected)}
             </div>
             <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
-              From active loan repayments
+              {t('reports.fromLoanRepayments', 'From active loan repayments')}
             </span>
           </div>
 
           <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: '#F8FAFC', border: '1px solid var(--border-color)' }}>
             <span style={{ fontSize: '0.725rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase' }}>
-              Outstanding Principal
+              {t('reports.outstandingPrincipal', 'Outstanding Principal')}
             </span>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>
               {formatCurrency(monthlyData?.summary?.outstandingPrincipal)}
             </div>
             <span style={{ fontSize: '0.725rem', color: 'var(--text-secondary)' }}>
-              Active loan balance in group
+              {t('reports.activeLoanBalance', 'Active loan balance in group')}
             </span>
           </div>
 
           <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
             <span style={{ fontSize: '0.725rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>
-              Available Group Balance
+              {t('reports.availableGroupBalance', 'Available Group Balance')}
             </span>
             <div style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
               {formatCurrency(monthlyData?.summary?.availableGroupBalance)}
             </div>
             <span style={{ fontSize: '0.725rem', color: '#166534' }}>
-              Net liquid fund in treasury
+              {t('reports.netLiquidCash', 'Net liquid fund in treasury')}
             </span>
           </div>
         </div>
 
         <div className="report-stat-strip" style={{ display: 'flex', gap: '20px', marginTop: '12px', padding: '10px 16px', background: '#F8FAFC', borderRadius: 'var(--radius-md)', fontSize: '0.825rem', flexWrap: 'wrap' }}>
-          <div><strong>Active Members:</strong> {formatNumber(monthlyData?.summary?.totalActiveMembers)}</div>
-          <div><strong>Paid Members:</strong> <span style={{ color: 'var(--success-text)', fontWeight: 700 }}>{formatNumber(monthlyData?.summary?.totalPaidMembers)}</span></div>
-          <div><strong>Pending Members:</strong> <span style={{ color: 'var(--danger-text)', fontWeight: 700 }}>{formatNumber(monthlyData?.summary?.totalPendingMembers)}</span></div>
+          <div><strong>{t('reports.activeMembersCount', 'Active Members:')}</strong> {formatNumber(monthlyData?.summary?.totalActiveMembers)}</div>
+          <div><strong>{t('reports.paidMembersCount', 'Paid Members:')}</strong> <span style={{ color: 'var(--success-text)', fontWeight: 700 }}>{formatNumber(monthlyData?.summary?.totalPaidMembers)}</span></div>
+          <div><strong>{t('reports.pendingMembersCount', 'Pending Members:')}</strong> <span style={{ color: 'var(--danger-text)', fontWeight: 700 }}>{formatNumber(monthlyData?.summary?.totalPendingMembers)}</span></div>
         </div>
       </div>
 
@@ -184,16 +195,16 @@ const FinancialReportDocument = ({
             <>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                 <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', textTransform: 'uppercase', letterSpacing: '0.04em', margin: 0 }}>
-                  2. Monthly Financial Register ({selectedPeriodText})
+                  2. {language === 'mr' ? 'मासिक आर्थिक नोंदवही' : 'Monthly Financial Register'} ({selectedPeriodText})
                 </h3>
                 <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Total Records: <strong>{formatNumber(registerList.length)}</strong>
+                  {language === 'mr' ? 'एकूण नोंदी:' : 'Total Records:'} <strong>{formatNumber(registerList.length)}</strong>
                 </span>
               </div>
 
               {registerList.length === 0 ? (
                 <div style={{ padding: '24px', textAlign: 'center', background: '#F8FAFC', borderRadius: 'var(--radius-md)', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
-                  No records found for this selected month.
+                  {language === 'mr' ? 'निवडलेल्या महिन्यासाठी कोणतीही नोंद आढळली नाही.' : 'No records found for this selected month.'}
                 </div>
               ) : (
                 <div className="table-responsive report-table-wrap" style={{ maxHeight: '650px', overflowY: 'auto' }}>
@@ -201,16 +212,16 @@ const FinancialReportDocument = ({
                     <thead>
                       <tr>
                         <th style={{ width: '35px', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>#</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Member Name</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Monthly Savings</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Loan Principal</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Monthly Interest</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Principal Repaid</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Total Payment</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Outstanding Loan</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Payment Date</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Pending Amount</th>
-                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>Status</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('reports.tableMemberName', 'Member Name')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('members.tableMonthlyShare', 'Monthly Savings')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('modals.loanAmount', 'Loan Principal')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('loans.tableMonthlyInterest', 'Monthly Interest')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('loans.tablePaidPrincipal', 'Principal Repaid')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('modals.totalPayment', 'Total Payment')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('reports.tableLoanOutstanding', 'Outstanding Loan')}</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('memberDetails.paymentDate', 'Payment Date')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('reports.tableTotalPending', 'Pending Amount')}</th>
+                        <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('common.status', 'Status')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -261,7 +272,7 @@ const FinancialReportDocument = ({
                                     ? 'badge-warning'
                                     : 'badge-danger'
                                 }`}
-                                style={{ fontSize: '0.65rem' }}
+                                style={{ fontSize: '0.7rem' }}
                               >
                                 {c.status}
                               </span>
@@ -272,7 +283,9 @@ const FinancialReportDocument = ({
                     </tbody>
                     <tfoot>
                       <tr style={{ background: '#F8FAFC', fontWeight: 800, borderTop: '2px solid var(--border-color)' }}>
-                        <td colSpan={2}>GRAND TOTALS ({registerList.length} Members)</td>
+                        <td colSpan={2} style={{ fontWeight: 800, fontSize: '0.9rem' }}>
+                          {t('common.grandTotal', 'GRAND TOTAL')} ({registerList.length} {language === 'mr' ? 'सभासद' : 'Members'})
+                        </td>
                         <td style={{ textAlign: 'right', color: 'var(--primary)' }}>
                           {formatCurrency(totalSavingsSum)}
                         </td>
@@ -285,14 +298,14 @@ const FinancialReportDocument = ({
                         <td style={{ textAlign: 'right', color: 'var(--info)' }}>
                           {totalPrincipalRepaidSum > 0 ? formatCurrency(totalPrincipalRepaidSum) : '-'}
                         </td>
-                        <td style={{ textAlign: 'right', color: 'var(--primary)', fontSize: '0.9rem', fontWeight: 900 }}>
+                        <td style={{ textAlign: 'right', color: 'var(--primary)', fontSize: '0.95rem', fontWeight: 900 }}>
                           {formatCurrency(totalPaymentSum)}
                         </td>
                         <td style={{ textAlign: 'right', color: 'var(--danger-text)' }}>
                           {totalOutstandingSum > 0 ? formatCurrency(totalOutstandingSum) : '-'}
                         </td>
-                        <td colSpan={3} style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                          {paidCount} Paid / {pendingCount} Pending
+                        <td colSpan={3} style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          {paidCount} {t('common.paid', 'Paid')} • {pendingCount} {t('common.pending', 'Pending')}
                         </td>
                       </tr>
                     </tfoot>
@@ -307,22 +320,22 @@ const FinancialReportDocument = ({
       {/* 4. Pending Dues Section */}
       <div className="report-section avoid-break">
         <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-          3. Pending Dues & Defaulters ({selectedPeriodText})
+          3. {language === 'mr' ? 'थकीत बाकी व थकबाकीदार' : 'Pending Dues & Defaulters'} ({selectedPeriodText})
         </h3>
         {duesList.length === 0 ? (
           <div style={{ padding: '16px 20px', borderRadius: 'var(--radius-md)', background: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', alignItems: 'center', gap: '8px', color: '#166534', fontSize: '0.85rem', fontWeight: 600 }}>
-            <CheckCircle2 size={16} /> All dues are completely cleared for {selectedPeriodText}! No pending member balances.
+            <CheckCircle2 size={16} /> {language === 'mr' ? `${selectedPeriodText} साठी सर्व बाकी पूर्णपणे भरली आहे! कोणत्याही सभासदाची बाकी नाही.` : `All dues are completely cleared for ${selectedPeriodText}! No pending member balances.`}
           </div>
         ) : (
           <div className="table-responsive report-table-wrap">
             <table className="custom-table" style={{ fontSize: '0.85rem', width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Member Name</th>
-                  <th style={{ textAlign: 'right' }}>Pending Hafta</th>
-                  <th style={{ textAlign: 'right' }}>Outstanding Loan</th>
-                  <th style={{ textAlign: 'right' }}>Pending Interest</th>
-                  <th style={{ textAlign: 'right' }}>Total Pending</th>
+                  <th>{t('reports.tableMemberName', 'Member Name')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tablePendingHafta', 'Pending Hafta')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tableLoanOutstanding', 'Outstanding Loan')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tablePendingInterest', 'Pending Interest')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tableTotalPending', 'Total Pending')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -355,7 +368,7 @@ const FinancialReportDocument = ({
               </tbody>
               <tfoot>
                 <tr style={{ background: '#FFF5F5', fontWeight: 800, color: 'var(--danger-text)' }}>
-                  <td colSpan={4}>TOTAL OUTSTANDING DUES ({duesList.length} Members)</td>
+                  <td colSpan={4}>{t('reports.totalPendingDuesCard', 'TOTAL OUTSTANDING DUES')} ({duesList.length} {language === 'mr' ? 'सभासद' : 'Members'})</td>
                   <td style={{ textAlign: 'right' }}>{formatCurrency(pendingData?.totalPendingAmount || pendingData?.summary?.totalPendingAmount)}</td>
                 </tr>
               </tfoot>
@@ -368,19 +381,19 @@ const FinancialReportDocument = ({
       {loans.length > 0 && (
         <div className="report-section avoid-break">
           <h3 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            4. Group Loan Portfolio Overview
+            4. {language === 'mr' ? 'गटाचा कर्ज पोर्टफोलिओ आढावा' : 'Group Loan Portfolio Overview'}
           </h3>
           <div className="table-responsive report-table-wrap">
             <table className="custom-table" style={{ fontSize: '0.85rem', width: '100%' }}>
               <thead>
                 <tr>
-                  <th>Loan #</th>
-                  <th>Borrower</th>
-                  <th style={{ textAlign: 'right' }}>Original Principal</th>
-                  <th style={{ textAlign: 'right' }}>Principal Recovered</th>
-                  <th style={{ textAlign: 'right' }}>Interest Collected</th>
-                  <th style={{ textAlign: 'right' }}>Remaining Balance</th>
-                  <th>Status</th>
+                  <th>{t('reports.tableLoanNumber', 'Loan #')}</th>
+                  <th>{t('reports.tableBorrower', 'Borrower')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tableOriginalLoan', 'Original Principal')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tablePrincipalRecovered', 'Principal Recovered')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tableInterestCollected', 'Interest Collected')}</th>
+                  <th style={{ textAlign: 'right' }}>{t('reports.tableRemainingBalance', 'Remaining Balance')}</th>
+                  <th>{t('common.status', 'Status')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -396,7 +409,7 @@ const FinancialReportDocument = ({
                     </td>
                     <td>
                       <span className={`badge ${l.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`} style={{ fontSize: '0.7rem' }}>
-                        {l.status}
+                        {l.status === 'ACTIVE' ? t('common.active', 'ACTIVE') : t('common.closed', 'CLOSED')}
                       </span>
                     </td>
                   </tr>
@@ -404,7 +417,7 @@ const FinancialReportDocument = ({
               </tbody>
               <tfoot>
                 <tr style={{ background: '#F8FAFC', fontWeight: 800 }}>
-                  <td colSpan={2}>PORTFOLIO TOTALS ({loans.length} Loans)</td>
+                  <td colSpan={2}>{language === 'mr' ? 'पोर्टफोलिओ एकूण' : 'PORTFOLIO TOTALS'} ({loans.length} {language === 'mr' ? 'कर्जे' : 'Loans'})</td>
                   <td style={{ textAlign: 'right' }}>{formatCurrency(loansData?.summary?.totalPrincipalDisbursed)}</td>
                   <td style={{ textAlign: 'right', color: 'var(--success-text)' }}>{formatCurrency(loansData?.summary?.totalPrincipalCollected)}</td>
                   <td style={{ textAlign: 'right', color: 'var(--primary)' }}>{formatCurrency(loansData?.summary?.totalInterestCollected)}</td>
@@ -433,17 +446,17 @@ const FinancialReportDocument = ({
       >
         <div style={{ textAlign: 'center', minWidth: '160px' }}>
           <div style={{ height: '40px', borderBottom: '1px dashed var(--text-muted)', marginBottom: '8px' }}></div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Secretary Signature</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('reports.secretarySignature', 'Secretary Signature')}</span>
         </div>
 
         <div style={{ textAlign: 'center', minWidth: '160px' }}>
           <div style={{ height: '40px', borderBottom: '1px dashed var(--text-muted)', marginBottom: '8px' }}></div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Treasurer Signature</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('reports.treasurerSignature', 'Treasurer Signature')}</span>
         </div>
 
         <div style={{ textAlign: 'center', minWidth: '160px' }}>
           <div style={{ height: '40px', borderBottom: '1px dashed var(--text-muted)', marginBottom: '8px' }}></div>
-          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>President / Admin Stamp</span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('reports.presidentAdminStamp', 'President / Admin Stamp')}</span>
         </div>
       </div>
     </div>

@@ -190,6 +190,20 @@ const Dashboard = () => {
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
   const filterDropdownRef = useRef(null);
 
+  const getFilterLabel = (filterVal) => {
+    switch (filterVal) {
+      case 'All': return t('dashboard.allTypes', 'All');
+      case 'monthlyInvestment': return t('dashboard.monthlyInvestment', 'Monthly Savings');
+      case 'loanIssue': return t('dashboard.loanIssue', 'Loan Issue');
+      case 'loanRepayment': return t('dashboard.loanRepayment', 'Loan Repayment');
+      case 'interestPayment': return t('dashboard.interestPayment', 'Interest Payment');
+      case 'adjustment': return t('dashboard.adjustment', 'Adjustment');
+      case 'otherIncome': return t('dashboard.otherIncome', 'Other Income');
+      case 'otherExpense': return t('dashboard.otherExpense', 'Other Expense');
+      default: return filterVal;
+    }
+  };
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target)) {
@@ -890,7 +904,7 @@ const Dashboard = () => {
                         </div>
                         <div>
                           <div style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--primary)' }}>{t('members.pendingDuesTab')}</div>
-                          <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>Expected: {formatCurrency(expectedPendingAmount)}</div>
+                          <div style={{ fontSize: '0.73rem', color: 'var(--text-secondary)' }}>{t('common.expected', 'Expected')}: {formatCurrency(expectedPendingAmount)}</div>
                         </div>
                       </div>
                       <span className="badge badge-danger">{pendingCount} {t('common.pending')}</span>
@@ -1004,11 +1018,11 @@ const Dashboard = () => {
               <Filter size={15} />
               {selectedTypeFilter !== 'All' ? (
                 <span style={{ fontSize: '0.75rem', fontWeight: 700 }}>
-                  {selectedTypeFilter}
+                  {getFilterLabel(selectedTypeFilter)}
                 </span>
               ) : (
                 <span style={{ fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-muted)' }}>
-                  Filter
+                  {t('common.filter', 'Filter')}
                 </span>
               )}
             </button>
@@ -1040,7 +1054,7 @@ const Dashboard = () => {
                     borderBottom: '1px solid var(--border-color)',
                   }}
                 >
-                  Transaction Type
+                  {t('dashboard.transactionType', 'Transaction Type')}
                 </div>
                 {TRANSACTION_TYPE_OPTIONS.map((opt) => {
                   const isSelected = selectedTypeFilter === opt.value;
@@ -1075,7 +1089,7 @@ const Dashboard = () => {
                         if (!isSelected) e.currentTarget.style.background = 'transparent';
                       }}
                     >
-                      <span>{opt.value}</span>
+                      <span>{getFilterLabel(opt.value)}</span>
                       {isSelected && <Check size={14} color="var(--primary)" />}
                     </button>
                   );
@@ -1121,7 +1135,7 @@ const Dashboard = () => {
           {selectedTypeFilter !== 'All' && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', background: '#F8FAFC', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', fontSize: '0.8rem' }}>
               <span style={{ color: 'var(--text-secondary)' }}>
-                Filter: <strong style={{ color: 'var(--primary)' }}>{selectedTypeFilter}</strong>
+                {t('common.filter', 'Filter')}: <strong style={{ color: 'var(--primary)' }}>{getFilterLabel(selectedTypeFilter)}</strong>
               </span>
               <button
                 type="button"
@@ -1142,7 +1156,7 @@ const Dashboard = () => {
                 onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--danger)')}
                 onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
               >
-                <X size={13} /> Reset Filter
+                <X size={13} /> {t('common.resetFilter', 'Reset Filter')}
               </button>
             </div>
           )}

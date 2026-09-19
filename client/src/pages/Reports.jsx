@@ -245,7 +245,7 @@ const Reports = () => {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>Select Period:</span>
+            <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)' }}>{t('reports.selectPeriodLabel', 'Select Period:')}</span>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))}
@@ -281,7 +281,7 @@ const Reports = () => {
                 type="text"
                 className="form-input"
                 style={{ paddingLeft: '32px', fontSize: '0.85rem' }}
-                placeholder="Search member..."
+                placeholder={t('reports.searchMemberPlaceholder', 'Search member...')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -291,7 +291,7 @@ const Reports = () => {
       )}
 
       {loading ? (
-        <Loader text="Generating report data..." />
+        <Loader text={t('common.loadingData', 'Generating report data...')} />
       ) : (
         <>
           {/* TAB 1: MONTHLY REPORT */}
@@ -300,35 +300,37 @@ const Reports = () => {
               {/* Collection Summary Strip */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL SAVINGS (MONTH)</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.totalSavingsMonth', 'TOTAL SAVINGS (MONTH)')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
                     {formatCurrency(monthlyData.summary?.monthSavings ?? monthlyData.summary?.totalSavingsCollected)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Collected in {months.find(m => m.value === selectedMonth)?.label}</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {language === 'mr' ? `${months.find(m => m.value === selectedMonth)?.label} मध्ये गोळा झालेली` : `Collected in ${months.find(m => m.value === selectedMonth)?.label}`}
+                  </span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL INTEREST (MONTH)</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.totalInterestMonth', 'TOTAL INTEREST (MONTH)')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
                     {formatCurrency(monthlyData.summary?.monthInterest ?? monthlyData.summary?.totalInterestCollected)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>From loan repayments</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.fromLoanRepayments', 'From loan repayments')}</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>OUTSTANDING PRINCIPAL</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.outstandingPrincipal', 'OUTSTANDING PRINCIPAL')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>
                     {formatCurrency(monthlyData.summary?.outstandingPrincipal)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Active loan balance</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.activeLoanBalance', 'Active loan balance')}</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px', borderColor: 'var(--success)', background: 'linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%)' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>AVAILABLE GROUP BALANCE</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.availableGroupBalance', 'AVAILABLE GROUP BALANCE')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
                     {formatCurrency(monthlyData.summary?.availableGroupBalance)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Net liquid cash in fund</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.netLiquidCash', 'Net liquid cash in fund')}</span>
                 </div>
               </div>
 
@@ -446,7 +448,7 @@ const Reports = () => {
                           <tfoot>
                             <tr style={{ background: '#F8FAFC', fontWeight: 800, borderTop: '2px solid var(--border-color)' }}>
                               <td colSpan={2} style={{ fontWeight: 800, fontSize: '0.9rem' }}>
-                                {language === 'mr' ? 'एकूण बेरीज (GRAND TOTAL)' : 'GRAND TOTAL'} ({registerList.length} {language === 'mr' ? 'सभासद' : 'Members'})
+                                {t('common.grandTotal', 'GRAND TOTAL')} ({registerList.length} {language === 'mr' ? 'सभासद' : 'Members'})
                               </td>
                               <td style={{ textAlign: 'right', color: 'var(--primary)' }}>
                                 {formatCurrency(totalSavingsSum)}
@@ -467,7 +469,7 @@ const Reports = () => {
                                 {totalOutstandingSum > 0 ? formatCurrency(totalOutstandingSum) : '-'}
                               </td>
                               <td colSpan={3} style={{ textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                {paidCount} {language === 'mr' ? 'जमा' : 'Paid'} • {pendingCount} {language === 'mr' ? 'शिल्लक' : 'Pending'}
+                                {paidCount} {t('common.paid', 'Paid')} • {pendingCount} {t('common.pending', 'Pending')}
                               </td>
                             </tr>
                           </tfoot>
@@ -499,14 +501,14 @@ const Reports = () => {
               >
                 <div>
                   <h3 style={{ color: 'var(--danger-text)', fontSize: '1.1rem', fontWeight: 800 }}>
-                    {formatNumber(pendingData.summary?.totalPendingMembers ?? pendingData.count)} Member(s) have pending balances
+                    {formatNumber(pendingData.summary?.totalPendingMembers ?? pendingData.count)} {language === 'mr' ? 'सभासदांची बाकी रक्कम शिल्लक आहे' : 'Member(s) have pending balances'}
                   </h3>
                   <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-                    For period {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
+                    {language === 'mr' ? 'या कालावधीसाठी' : 'For period'} {months.find(m => m.value === selectedMonth)?.label} {selectedYear}
                   </p>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger-text)' }}>TOTAL PENDING DUES</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--danger-text)' }}>{t('reports.totalPendingDuesCard', 'TOTAL PENDING DUES')}</span>
                   <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--danger-text)' }}>
                     {formatCurrency(pendingData.summary?.totalPendingAmount ?? pendingData.totalPendingAmount)}
                   </div>
@@ -518,19 +520,19 @@ const Reports = () => {
                 {(!pendingData.duesList || pendingData.duesList.length === 0) ? (
                   <EmptyState
                     icon={CheckCircle2}
-                    title="All dues cleared!"
-                    description="There are no pending savings or loan dues for the selected period."
+                    title={t('reports.allDuesClearedTitle', 'All dues cleared!')}
+                    description={t('reports.allDuesClearedDesc', 'There are no pending savings or loan dues for the selected period.')}
                   />
                 ) : (
                   <div className="table-responsive">
                     <table className="custom-table">
                       <thead>
                         <tr>
-                          <th>Member Name</th>
-                          <th>Pending Hafta</th>
-                          <th>Loan Outstanding</th>
-                          <th>Pending Interest</th>
-                          <th>Total Pending</th>
+                          <th>{t('reports.tableMemberName', 'Member Name')}</th>
+                          <th>{t('reports.tablePendingHafta', 'Pending Hafta')}</th>
+                          <th>{t('reports.tableLoanOutstanding', 'Loan Outstanding')}</th>
+                          <th>{t('reports.tablePendingInterest', 'Pending Interest')}</th>
+                          <th>{t('reports.tableTotalPending', 'Total Pending')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -577,35 +579,37 @@ const Reports = () => {
               {/* Summary Strip */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL DISBURSED</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.totalDisbursedCard', 'TOTAL DISBURSED')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '4px' }}>
                     {formatCurrency(loansData.summary?.totalPrincipalDisbursed)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Across {formatNumber(loansData.summary?.totalLoans ?? loansData.summary?.totalLoansCount)} loan(s)</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                    {language === 'mr' ? `एकूण ${formatNumber(loansData.summary?.totalLoans ?? loansData.summary?.totalLoansCount)} कर्जे` : `Across ${formatNumber(loansData.summary?.totalLoans ?? loansData.summary?.totalLoansCount)} loan(s)`}
+                  </span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>PRINCIPAL COLLECTED</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.principalCollectedCard', 'PRINCIPAL COLLECTED')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
                     {formatCurrency(loansData.summary?.totalPrincipalCollected ?? loansData.summary?.totalPrincipalRecovered)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Recovered principal</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.recoveredPrincipal', 'Recovered principal')}</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>INTEREST EARNED</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.interestEarnedCard', 'INTEREST EARNED')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
                     {formatCurrency(loansData.summary?.totalInterestCollected ?? loansData.summary?.totalInterestEarned)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Cumulative interest</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.cumulativeInterest', 'Cumulative interest')}</span>
                 </div>
 
                 <div className="card" style={{ padding: '18px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>REMAINING OUTSTANDING</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('reports.remainingOutstandingCard', 'REMAINING OUTSTANDING')}</span>
                   <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--danger-text)', marginTop: '4px' }}>
                     {formatCurrency(loansData.summary?.totalOutstanding)}
                   </div>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Active loan balance</span>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('reports.activeLoanBalance', 'Active loan balance')}</span>
                 </div>
               </div>
 
@@ -614,22 +618,22 @@ const Reports = () => {
                 {(!loansData.loans || loansData.loans.length === 0) ? (
                   <EmptyState
                     icon={HandCoins}
-                    title="No loans found"
-                    description="There are currently no loans recorded in the system."
+                    title={t('loans.noLoansFound', 'No loans found')}
+                    description={t('reports.noLoansFoundDesc', 'There are currently no loans recorded in the system.')}
                   />
                 ) : (
                   <div className="table-responsive">
                     <table className="custom-table">
                       <thead>
                         <tr>
-                          <th>Loan #</th>
-                          <th>Member</th>
-                          <th>Original Loan</th>
-                          <th>Principal Paid</th>
-                          <th>Interest Paid</th>
-                          <th>Outstanding</th>
-                          <th>Repayments</th>
-                          <th>Status</th>
+                          <th>{t('reports.tableLoanNumber', 'Loan #')}</th>
+                          <th>{t('reports.tableBorrower', 'Member')}</th>
+                          <th>{t('reports.tableOriginalLoan', 'Original Loan')}</th>
+                          <th>{t('loans.tablePaidPrincipal', 'Principal Paid')}</th>
+                          <th>{t('loans.tablePaidInterest', 'Interest Paid')}</th>
+                          <th>{t('loans.tableOutstanding', 'Outstanding')}</th>
+                          <th>{t('reports.tableRepaymentsCount', 'Repayments')}</th>
+                          <th>{t('common.status', 'Status')}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -646,10 +650,10 @@ const Reports = () => {
                             <td style={{ fontWeight: 800, color: l.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--text-muted)' }}>
                               {formatCurrency(l.outstanding_amount || l.outstandingAmount)}
                             </td>
-                            <td>{formatNumber(l.repayments_count)} installments</td>
+                            <td>{formatNumber(l.repayments_count)} {language === 'mr' ? 'हप्ते' : 'installments'}</td>
                             <td>
                               <span className={`badge ${l.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`}>
-                                {l.status}
+                                {l.status === 'ACTIVE' ? t('common.active', 'ACTIVE') : t('common.closed', 'CLOSED')}
                               </span>
                             </td>
                           </tr>

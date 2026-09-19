@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import { loanService } from '../services/loanService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
@@ -22,6 +23,7 @@ const LoanDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { canManageLoans } = useAuth();
+  const { t, language } = useLanguage();
 
   const [loan, setLoan] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -45,8 +47,8 @@ const LoanDetails = () => {
     fetchLoan();
   }, [id]);
 
-  if (loading) return <Loader text="Loading loan profile..." />;
-  if (!loan) return <EmptyState title="Loan not found" description="The requested loan record could not be found." />;
+  if (loading) return <Loader text={t('common.loadingData', 'Loading loan profile...')} />;
+  if (!loan) return <EmptyState title={t('loanDetails.loanNotFoundTitle', 'Loan not found')} description={t('loanDetails.loanNotFoundDesc', 'The requested loan record could not be found.')} />;
 
   const repaymentsList = loan.repayments || [];
   const totalPrincipalRepaid = repaymentsList.reduce((acc, r) => acc + (parseFloat(r.principal_repayment_amount || r.principalAmount) || 0), 0);
@@ -61,7 +63,7 @@ const LoanDetails = () => {
           className="btn-secondary"
           style={{ padding: '6px 12px', fontSize: '0.85rem' }}
         >
-          <ArrowLeft size={16} /> Back to Loans
+          <ArrowLeft size={16} /> {t('loanDetails.backToLoans', 'Back to Loans')}
         </button>
       </div>
 
@@ -80,9 +82,11 @@ const LoanDetails = () => {
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>Loan #{loan.loan_number || loan.loanNumber}</h1>
+            <h1 style={{ fontSize: '1.6rem', fontWeight: 800 }}>
+              {t('loanDetails.loanNumber', { num: loan.loan_number || loan.loanNumber })}
+            </h1>
             <span className={`badge ${loan.status === 'ACTIVE' ? 'badge-warning' : 'badge-success'}`}>
-              {loan.status}
+              {loan.status === 'ACTIVE' ? t('common.active', 'ACTIVE') : t('common.closed', 'CLOSED')}
             </span>
           </div>
 
@@ -94,20 +98,20 @@ const LoanDetails = () => {
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
               <Calendar size={16} color="var(--text-muted)" />
-              <span>Disbursed: {formatDate(loan.loan_date || loan.loanDate)}</span>
+              <span>{t('loanDetails.disbursed', { date: formatDate(loan.loan_date || loan.loanDate) })}</span>
             </div>
           </div>
 
           {loan.purpose && (
             <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: '6px' }}>
-              Purpose: {loan.purpose}
+              {t('loanDetails.purpose', { purpose: loan.purpose })}
             </div>
           )}
         </div>
 
         {canManageLoans && loan.status === 'ACTIVE' && (
           <button onClick={() => setIsRepayOpen(true)} className="btn-primary">
-            <CreditCard size={16} /> Record Repayment
+            <CreditCard size={16} /> {t('loanDetails.recordPaymentBtn', 'Record Repayment')}
           </button>
         )}
       </div>
@@ -115,44 +119,48 @@ const LoanDetails = () => {
       {/* Financial Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
         <div className="card" style={{ padding: '18px 20px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>ORIGINAL PRINCIPAL</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('loanDetails.originalPrincipal', 'ORIGINAL PRINCIPAL')}</span>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '4px' }}>{formatCurrency(loan.principal_amount || loan.principalAmount)}</div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Duration: {loan.duration_months || 12} Months</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('loanDetails.durationMonths', { months: loan.duration_months || 12 })}</span>
         </div>
 
         <div className="card" style={{ padding: '18px 20px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>MONTHLY INTEREST RATE</span>
-          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>{loan.interest_rate || loan.interestRate || 2}% / month</div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{formatCurrency(((Number(loan.outstanding_amount || 0)) * Number(loan.interest_rate || 2)) / 100)} on current balance</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('loanDetails.monthlyInterestRate', 'MONTHLY INTEREST RATE')}</span>
+          <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--primary)', marginTop: '4px' }}>
+            {loan.interest_rate || loan.interestRate || 2}% / {language === 'mr' ? 'महिना' : 'month'}
+          </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+            {t('loanDetails.onCurrentBalance', { amount: formatCurrency(((Number(loan.outstanding_amount || 0)) * Number(loan.interest_rate || 2)) / 100) })}
+          </span>
         </div>
 
         <div className="card" style={{ padding: '18px 20px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>CURRENT OUTSTANDING</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('loanDetails.currentOutstanding', 'CURRENT OUTSTANDING')}</span>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: loan.status === 'ACTIVE' ? 'var(--danger-text)' : 'var(--success-text)', marginTop: '4px' }}>
             {formatCurrency(loan.outstanding_amount || loan.outstandingAmount)}
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Repaid: {loan.repaid_percent || 0}%</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('loanDetails.repaidPercent', { percent: loan.repaid_percent || 0 })}</span>
         </div>
 
         <div className="card" style={{ padding: '18px 20px' }}>
-          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>TOTAL INTEREST PAID</span>
+          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-muted)' }}>{t('loanDetails.totalInterestPaid', 'TOTAL INTEREST PAID')}</span>
           <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--success-text)', marginTop: '4px' }}>
             {formatCurrency(totalInterestPaid)}
           </div>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Over {repaymentsList.length} installment(s)</span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>{t('loanDetails.overInstallments', { count: repaymentsList.length })}</span>
         </div>
       </div>
 
       {/* Repayments Schedule Table */}
       <div className="card">
-        <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>Loan Repayment Schedule & History</h2>
+        <h2 style={{ fontSize: '1.2rem', marginBottom: '16px' }}>{t('loanDetails.repaymentScheduleTitle', 'Loan Repayment Schedule & History')}</h2>
 
         {repaymentsList.length === 0 ? (
           <EmptyState
             icon={CreditCard}
-            title="No repayments recorded"
-            description="No installment payments have been made on this loan yet."
-            actionText={canManageLoans && loan.status === 'ACTIVE' ? 'Record Payment' : undefined}
+            title={t('loanDetails.noRepaymentsTitle', 'No repayments recorded')}
+            description={t('loanDetails.noRepaymentsDesc', 'No installment payments have been made on this loan yet.')}
+            actionText={canManageLoans && loan.status === 'ACTIVE' ? t('loanDetails.recordPaymentBtn', 'Record Repayment') : undefined}
             onAction={() => setIsRepayOpen(true)}
           />
         ) : (
@@ -160,21 +168,21 @@ const LoanDetails = () => {
             <table className="custom-table">
               <thead>
                 <tr>
-                  <th>Installment Period</th>
-                  <th>Principal Paid</th>
-                  <th>Interest Paid</th>
-                  <th>Total Payment</th>
-                  <th>Payment Date</th>
-                  <th>Mode</th>
-                  <th>Remarks</th>
-                  <th>Recorded By</th>
+                  <th>{t('loanDetails.tablePeriod', 'Installment Period')}</th>
+                  <th>{t('loanDetails.tablePrincipalPaid', 'Principal Paid')}</th>
+                  <th>{t('loanDetails.tableInterestPaid', 'Interest Paid')}</th>
+                  <th>{t('loanDetails.tableTotalPayment', 'Total Payment')}</th>
+                  <th>{t('loanDetails.tablePaymentDate', 'Payment Date')}</th>
+                  <th>{t('loanDetails.tableMode', 'Mode')}</th>
+                  <th>{t('loanDetails.tableRemarks', 'Remarks')}</th>
+                  <th>{t('loanDetails.tableRecordedBy', 'Recorded By')}</th>
                 </tr>
               </thead>
               <tbody>
                 {repaymentsList.map((r) => (
                   <tr key={r.id || r.repayment_id}>
                     <td style={{ fontWeight: 700, color: 'var(--primary)' }}>
-                      {formatMonthYear(r.payment_month || r.month, r.payment_year || r.year)}
+                      {formatMonthYear(r.payment_month || r.month, r.payment_year || r.year, language)}
                     </td>
                     <td style={{ fontWeight: 600 }}>{formatCurrency(r.principal_repayment_amount || r.principalAmount)}</td>
                     <td style={{ fontWeight: 600, color: 'var(--primary)' }}>{formatCurrency(r.interest_amount || r.interestAmount)}</td>
@@ -188,7 +196,7 @@ const LoanDetails = () => {
               </tbody>
               <tfoot>
                 <tr style={{ background: '#F8FAFC', fontWeight: 800 }}>
-                  <td>TOTAL PAID</td>
+                  <td>{t('loanDetails.tableTotalPaid', 'TOTAL PAID')}</td>
                   <td style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalPrincipalRepaid)}</td>
                   <td style={{ color: 'var(--primary)' }}>{formatCurrency(totalInterestPaid)}</td>
                   <td style={{ color: 'var(--success-text)', fontSize: '1.05rem' }}>{formatCurrency(totalPaymentSum)}</td>

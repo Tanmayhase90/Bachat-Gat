@@ -1,13 +1,18 @@
 import React from 'react';
 import { Inbox } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 const EmptyState = ({
   icon: Icon = Inbox,
-  title = 'No Data Found',
-  description = 'There are no records to display at this moment.',
+  title,
+  description,
   actionText,
   onAction,
 }) => {
+  const { t } = useLanguage();
+  const displayTitle = title !== undefined ? title : t('common.noDataFound', 'No Data Found');
+  const displayDescription = description !== undefined ? description : t('common.noRecordsDesc', 'There are no records to display at this moment.');
+
   return (
     <div style={{
       display: 'flex',
@@ -34,9 +39,9 @@ const EmptyState = ({
       }}>
         <Icon size={28} />
       </div>
-      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>{title}</h3>
+      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '6px', color: 'var(--text-primary)' }}>{displayTitle}</h3>
       <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', maxWidth: '400px', marginBottom: actionText ? '20px' : '0' }}>
-        {description}
+        {displayDescription}
       </p>
       {actionText && onAction && (
         <button onClick={onAction} className="btn-primary">

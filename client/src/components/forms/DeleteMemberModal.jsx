@@ -79,21 +79,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
         }
       }
 
-      // 2. Settle pending monthly savings if any
-      if (balanceData.pendingSavings > 0) {
-        const currentDate = new Date();
-        await savingsService.recordSavings({
-          member_id: memberId,
-          amount: balanceData.pendingSavings,
-          month: currentDate.getMonth() + 1,
-          year: currentDate.getFullYear(),
-          payment_mode: 'CASH',
-          remarks: 'Settlement before member deletion',
-          payment_date: currentDate.toISOString().split('T')[0],
-        });
-      }
-
-      setSuccessMsg('All dues settled successfully! Account balance is now clear. Please review and confirm final deletion.');
+      setSuccessMsg('All loan dues settled successfully! Account balance is now clear. Please review and confirm final deletion.');
       // Refresh balance data (do NOT automatically delete)
       await fetchBalance();
     } catch (err) {
@@ -433,7 +419,7 @@ const DeleteMemberModal = ({ isOpen, onClose, member, onSuccess }) => {
                       Financial Clearance: 100% CLEAR (₹0 Dues)
                     </h5>
                     <p style={{ margin: 0, fontSize: '0.84rem', color: 'var(--text-secondary)' }}>
-                      All loans and monthly savings for <strong>{memberName}</strong> are fully paid and settled. This account is eligible for deletion.
+                      All loans and financial obligations for <strong>{memberName}</strong> are fully paid and settled. This account is eligible for deletion.
                     </p>
                   </div>
                 </div>

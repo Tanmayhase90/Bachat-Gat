@@ -791,7 +791,7 @@ export const memberService = {
         ? Number(m.current_due)
         : (m.currentDue !== undefined && m.currentDue > 0 ? Number(m.currentDue) : 0);
 
-      const totalPayable = Math.round((totalOutstandingPrincipal + totalOutstandingInterest + pendingSavings) * 100) / 100;
+      const totalPayable = Math.round((totalOutstandingPrincipal + totalOutstandingInterest) * 100) / 100;
       const isClear = totalPayable <= 0 && activeLoans.length === 0;
 
       // Group totals & member interest share calculation
@@ -821,13 +821,14 @@ export const memberService = {
       const dynamicTotalInterest = Math.max(0, Math.round((allContributionsInterest + allRepaymentsInterest - totalSettledInterest) * 100) / 100);
       const totalGroupInterest = storedGroupInterest > 0 ? storedGroupInterest : dynamicTotalInterest;
 
-      // Formula: memberInterestShare = totalGroupInterest / totalGroupMembers (total count before deletion)
-      const memberInterestShare = totalGroupMembers > 0
-        ? Math.round((totalGroupInterest / totalGroupMembers) * 100) / 100
+      // Formula: interestShare = FLOOR(totalInterest / totalMemberCount)
+      // Must always be a complete integer rupee amount (e.g. 395 / 366 -> 1, 1060 / 500 -> 2)
+      const memberInterestShare = totalGroupMembers > 0 && totalGroupInterest > 0
+        ? Math.floor(totalGroupInterest / totalGroupMembers)
         : 0;
 
-      const lifetimeSavings = Number(m.total_savings || m.totalSavings || 0);
-      const totalSettlementPayable = Math.round((lifetimeSavings + memberInterestShare) * 100) / 100;
+      const lifetimeSavings = Math.floor(Number(m.total_savings || m.totalSavings || 0));
+      const totalSettlementPayable = lifetimeSavings + memberInterestShare;
 
       return {
         success: true,
@@ -868,11 +869,14 @@ export const memberService = {
 
       const linkedUid = memberSnap.data().authUid || memberSnap.data().userId || memberSnap.data().firebaseUid;
       const memberName = memberSnap.data().name || memberSnap.data().fullName || balanceRes.member?.name || 'Member';
-      const lifetimeSavings = Number(balanceRes.lifetimeSavings || 0);
+      const lifetimeSavings = Math.floor(Number(balanceRes.lifetimeSavings || 0));
       const totalGroupInterest = Number(balanceRes.totalGroupInterest || 0);
       const totalGroupMembers = Number(balanceRes.totalGroupMembers || 1);
-      const memberInterestShare = Number(balanceRes.memberInterestShare || 0);
-      const totalSettlementAmount = Math.round((lifetimeSavings + memberInterestShare) * 100) / 100;
+      // Interest share is strictly an integer rupee amount: FLOOR(totalInterest / totalMemberCount)
+      const memberInterestShare = totalGroupMembers > 0 && totalGroupInterest > 0
+        ? Math.floor(totalGroupInterest / totalGroupMembers)
+        : 0;
+      const totalSettlementAmount = lifetimeSavings + memberInterestShare;
 
       // Record final settlement record in Firestore
       const settleId = `SETTLE_${Date.now()}_${memberId}`;

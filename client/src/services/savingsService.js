@@ -13,6 +13,7 @@ import { db } from '../config/firebase.js';
 import {
   normalizeSavings,
   normalizeMember,
+  isRegularMember,
   isMonthlySavingPaid,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
@@ -30,27 +31,82 @@ export const savingsService = {
         getDocs(collection(db, 'groups', targetGroupId, 'members')).catch(() => ({ docs: [] })),
       ]);
 
-      const membersMap = {};
-      membersSnap.docs.forEach((docSnap) => {
-        const d = docSnap.data();
-        membersMap[docSnap.id] = d.name || d.fullName || 'Member';
-        if (d.userId) membersMap[d.userId] = d.name || d.fullName || 'Member';
-        if (d.authUid) membersMap[d.authUid] = d.name || d.fullName || 'Member';
+      const regularMemberDocs = (membersSnap && membersSnap.docs)
+        ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
+        : [];
+      const allMembers = regularMemberDocs.map((d) => normalizeMember(d.id, d.data()));
+      const activeMembers = allMembers.filter((mem) => {
+        const s = (mem.status || 'ACTIVE').toUpperCase();
+        return mem.isActive !== false && s === 'ACTIVE';
       });
 
-      const savings = contributionsSnap.docs
-        .map((docSnap) => {
-          const raw = docSnap.data();
-          const normalized = normalizeSavings(docSnap.id, raw);
-          const memberName = membersMap[normalized.memberId] || normalized.memberName;
+      const activeMemberMap = new Map();
+      activeMembers.forEach((mem) => {
+        if (mem.id) activeMemberMap.set(String(mem.id), mem);
+        if (mem.memberId) activeMemberMap.set(String(mem.memberId), mem);
+        if (mem.memberCode) activeMemberMap.set(String(mem.memberCode), mem);
+        if (mem.member_code) activeMemberMap.set(String(mem.member_code), mem);
+        if (mem.userId) activeMemberMap.set(String(mem.userId), mem);
+        if (mem.authUid) activeMemberMap.set(String(mem.authUid), mem);
+        const cleanId = String(mem.id || '').toLowerCase().replace(/[-_]/g, '');
+        if (cleanId) activeMemberMap.set(cleanId, mem);
+        const cleanCode = String(mem.memberCode || mem.member_code || '').toLowerCase().replace(/[-_]/g, '');
+        if (cleanCode) activeMemberMap.set(cleanCode, mem);
+      });
 
-          return {
-            ...normalized,
-            member_name: memberName,
-            memberName: memberName,
-          };
-        })
-        .filter((s) => s.paidAmount > 0 || s.status === 'paid' || params.includePending);
+      // Sort docs so latest updated/created record takes precedence if duplicate
+      const sortedDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+
+      const seenMemberPeriod = new Set();
+      const validSavings = [];
+
+      sortedDocs.forEach((docSnap) => {
+        const raw = docSnap.data();
+        const normalized = normalizeSavings(docSnap.id, raw);
+
+        const mId = String(normalized.memberId || normalized.member_id || '');
+        const mCode = String(normalized.memberCode || normalized.member_code || '');
+        const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+        const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+
+        const member = activeMemberMap.get(mId) ||
+                       activeMemberMap.get(mCode) ||
+                       activeMemberMap.get(cleanId) ||
+                       activeMemberMap.get(cleanCode);
+
+        // Only include contributions belonging to valid active regular members of the group
+        if (!member) {
+          return;
+        }
+
+        // Deduplicate payments by (memberId, year, month)
+        const dedupKey = `${member.id}_${normalized.year}_${normalized.month}`;
+        if (seenMemberPeriod.has(dedupKey)) {
+          return;
+        }
+        seenMemberPeriod.add(dedupKey);
+
+        const memberName = member.name || member.fullName || normalized.memberName;
+        const memberCode = member.memberCode || member.member_code || normalized.memberCode;
+
+        validSavings.push({
+          ...normalized,
+          memberId: member.id,
+          member_id: member.id,
+          memberName,
+          member_name: memberName,
+          memberCode,
+          member_code: memberCode,
+        });
+      });
+
+      const savings = validSavings.filter(
+        (s) => s.paidAmount > 0 || s.status === 'paid' || params.includePending
+      );
 
       // Filter by month, year, search if provided
       let filtered = savings;

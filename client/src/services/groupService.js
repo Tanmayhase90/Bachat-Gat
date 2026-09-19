@@ -54,7 +54,28 @@ export const groupService = {
       const monthlyTarget = activeMembers * monthlyContributionPerShare;
 
       // 2. Total Savings
-      const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const regularMemberIdSet = new Set();
+      regularDocs.forEach((d) => {
+        regularMemberIdSet.add(d.id);
+        const mData = d.data();
+        if (mData.memberCode) regularMemberIdSet.add(mData.memberCode);
+        if (mData.member_code) regularMemberIdSet.add(mData.member_code);
+        if (mData.userId) regularMemberIdSet.add(mData.userId);
+        if (mData.authUid) regularMemberIdSet.add(mData.authUid);
+        const cleanId = d.id.toLowerCase().replace(/[-_]/g, '');
+        if (cleanId) regularMemberIdSet.add(cleanId);
+      });
+
+      const allSavings = contributionsSnap.docs
+        .map((d) => normalizeSavings(d.id, d.data()))
+        .filter((c) => {
+          const mId = String(c.memberId || c.member_id || '');
+          const mCode = String(c.memberCode || c.member_code || '');
+          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+          return regularMemberIdSet.has(mId) || regularMemberIdSet.has(mCode) || regularMemberIdSet.has(cleanId) || regularMemberIdSet.has(cleanCode);
+        });
+
       const grossSavings = allSavings
         .filter((c) => c.isPaid || c.paidAmount > 0)
         .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);

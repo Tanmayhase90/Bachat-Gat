@@ -58,10 +58,38 @@ export const reportService = {
       // Sort members in ascending numerical order by Member ID / Member Code (e.g. M_1, M_2 ... M_10 ... M_365)
       activeMembers.sort(compareMemberNumericOrder);
 
-      // Filter contributions for selected month and year
-      const monthContributions = contributionsSnap.docs
-        .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((s) => s.month === m && s.year === y);
+      // Filter contributions for selected month and year strictly belonging to valid active regular members
+      const activeMemberIdSet = new Set();
+      activeMembers.forEach((mem) => {
+        if (mem.id) activeMemberIdSet.add(String(mem.id));
+        if (mem.memberCode) activeMemberIdSet.add(String(mem.memberCode));
+        if (mem.member_code) activeMemberIdSet.add(String(mem.member_code));
+        if (mem.userId) activeMemberIdSet.add(String(mem.userId));
+        if (mem.authUid) activeMemberIdSet.add(String(mem.authUid));
+        const cleanId = String(mem.id || '').toLowerCase().replace(/[-_]/g, '');
+        if (cleanId) activeMemberIdSet.add(cleanId);
+        const cleanCode = String(mem.memberCode || mem.member_code || '').toLowerCase().replace(/[-_]/g, '');
+        if (cleanCode) activeMemberIdSet.add(cleanCode);
+      });
+
+      const seenReportMembers = new Set();
+      const monthContributions = [];
+      contributionsSnap.docs.forEach((d) => {
+        const s = normalizeSavings(d.id, d.data());
+        if (s.month === m && s.year === y) {
+          const mId = String(s.memberId || s.member_id || '');
+          const mCode = String(s.memberCode || s.member_code || '');
+          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+          if (activeMemberIdSet.has(mId) || activeMemberIdSet.has(mCode) || activeMemberIdSet.has(cleanId) || activeMemberIdSet.has(cleanCode)) {
+            const dedupKey = `${mId}_${s.year}_${s.month}`;
+            if (!seenReportMembers.has(dedupKey)) {
+              seenReportMembers.add(dedupKey);
+              monthContributions.push(s);
+            }
+          }
+        }
+      });
 
       const repaymentsList = repaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
       const repaymentsByLoan = {};
@@ -119,7 +147,15 @@ export const reportService = {
       }, 0);
 
       // Centralized Group Balances dynamically aggregated from all contributions and repayments
-      const allSavings = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const allSavings = contributionsSnap.docs
+        .map((d) => normalizeSavings(d.id, d.data()))
+        .filter((c) => {
+          const mId = String(c.memberId || c.member_id || '');
+          const mCode = String(c.memberCode || c.member_code || '');
+          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+          return activeMemberIdSet.has(mId) || activeMemberIdSet.has(mCode) || activeMemberIdSet.has(cleanId) || activeMemberIdSet.has(cleanCode);
+        });
       const grossSavings = allSavings.filter((c) => c.isPaid || c.paidAmount > 0).reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
 
       const totalSettledSavings = settlementsSnap.docs.reduce((sum, d) => {

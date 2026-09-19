@@ -98,7 +98,31 @@ export const dashboardService = {
       const groupCode = group.groupCode || targetGroupId;
 
       // 1. Core Financial Baseline calculated dynamically from real collections
-      const contributionsList = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const regularMemberDocs = (membersSnap && membersSnap.docs)
+        ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
+        : [];
+      const validMemberIdSet = new Set();
+      regularMemberDocs.forEach((d) => {
+        validMemberIdSet.add(d.id);
+        const mData = d.data();
+        if (mData.memberCode) validMemberIdSet.add(mData.memberCode);
+        if (mData.member_code) validMemberIdSet.add(mData.member_code);
+        if (mData.userId) validMemberIdSet.add(mData.userId);
+        if (mData.authUid) validMemberIdSet.add(mData.authUid);
+        const cleanId = d.id.toLowerCase().replace(/[-_]/g, '');
+        if (cleanId) validMemberIdSet.add(cleanId);
+      });
+
+      const contributionsList = contributionsSnap.docs
+        .map((d) => normalizeSavings(d.id, d.data()))
+        .filter((c) => {
+          const mId = String(c.memberId || c.member_id || '');
+          const mCode = String(c.memberCode || c.member_code || '');
+          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+          return validMemberIdSet.has(mId) || validMemberIdSet.has(mCode) || validMemberIdSet.has(cleanId) || validMemberIdSet.has(cleanCode);
+        });
+
       const liveSavingsTotal = contributionsList
         .filter((c) => c.isPaid || c.paidAmount > 0)
         .reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
@@ -178,9 +202,6 @@ export const dashboardService = {
       const availableBalance = Math.max(0, totalGroupFund - activeLoans);
 
       // 5. Member metrics (strictly regular group members)
-      const regularMemberDocs = (membersSnap && membersSnap.docs)
-        ? membersSnap.docs.filter((d) => isRegularMember({ id: d.id, ...d.data() }))
-        : [];
       const totalMembers = regularMemberDocs.length || group.totalMembers || group.total_members || 0;
       const activeMembers = regularMemberDocs.length > 0
         ? regularMemberDocs.filter((d) => (d.data().status || 'active').toLowerCase() === 'active').length

@@ -467,6 +467,42 @@ export const loanService = {
         throw new Error('The selected member is not active or no longer exists.');
       }
 
+      // 3. Real-time active loan eligibility check: member cannot take a new loan if they have an active loan with outstanding balance
+      const [existingLoansSnap, existingRepaymentsSnap] = await Promise.all([
+        getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
+        getDocs(collection(db, 'groups', targetGroupId, 'repayments')).catch(() => ({ docs: [] })),
+      ]);
+
+      const existingRepaymentsList = existingRepaymentsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const existingRepaymentsByLoan = {};
+      existingRepaymentsList.forEach((r) => {
+        const lId = r.loanId || r.loan_id;
+        if (lId) {
+          if (!existingRepaymentsByLoan[lId]) existingRepaymentsByLoan[lId] = [];
+          existingRepaymentsByLoan[lId].push(r);
+        }
+      });
+
+      const memberData = selectedMemberSnap.data() || {};
+      const memberCode = memberData.memberCode || memberData.member_code || '';
+
+      const memberActiveLoans = existingLoansSnap.docs
+        .map((docSnap) => {
+          const raw = docSnap.data();
+          const loanRepays = existingRepaymentsByLoan[docSnap.id] || existingRepaymentsByLoan[raw.loanId] || existingRepaymentsByLoan[raw.loan_id] || existingRepaymentsByLoan[raw.id] || [];
+          return normalizeLoan(docSnap.id, raw, loanRepays);
+        })
+        .filter((l) => {
+          const isThisMember = l.memberId === memberId || l.member_id === memberId || (memberCode && (l.memberCode === memberCode || l.member_code === memberCode));
+          const isActive = (l.status || '').toUpperCase() === 'ACTIVE';
+          const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+          return isThisMember && isActive && pending > 0;
+        });
+
+      if (memberActiveLoans.length > 0) {
+        throw new Error('This member already has an active loan with an outstanding balance. A new loan cannot be issued until the existing loan is fully repaid.');
+      }
+
       const loanId = `L_${Date.now()}`;
       const loanDocRef = doc(db, 'groups', targetGroupId, 'loans', loanId);
 

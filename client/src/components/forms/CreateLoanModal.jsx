@@ -47,17 +47,55 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
       const fetchData = async () => {
         try {
           setLoadingBalance(true);
-          const [memRes, balanceRes] = await Promise.all([
+          const [memRes, balanceRes, loansRes] = await Promise.all([
             memberService.getAllMembers({ status: 'active' }),
             loanService.getAvailableBalance(),
+            loanService.getAllLoans(),
           ]);
 
           if (memRes.success) {
-            setMembers(memRes.members);
+            const allLoansList = loansRes?.allLoans || loansRes?.loans || [];
+            const activeLoansList = allLoansList.filter((l) => {
+              const status = (l.status || '').toUpperCase();
+              const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0));
+              return status === 'ACTIVE' && pending > 0;
+            });
+
+            const activeBorrowerMemberIds = new Set();
+            activeLoansList.forEach((l) => {
+              if (l.memberId) activeBorrowerMemberIds.add(String(l.memberId));
+              if (l.member_id) activeBorrowerMemberIds.add(String(l.member_id));
+              if (l.memberCode) activeBorrowerMemberIds.add(String(l.memberCode));
+              if (l.member_code) activeBorrowerMemberIds.add(String(l.member_code));
+            });
+
+            const eligibleMembers = (memRes.members || []).filter((m) => {
+              const mId = String(m.member_id || m.id || '');
+              const mCode = String(m.member_code || m.memberCode || '');
+
+              const hasActiveLoanFromLoansList = (mId && activeBorrowerMemberIds.has(mId)) || (mCode && activeBorrowerMemberIds.has(mCode));
+              const hasActiveLoanFromMemberData = Number(m.outstanding_loans || m.active_loan_amount || 0) > 0;
+
+              return !hasActiveLoanFromLoansList && !hasActiveLoanFromMemberData;
+            });
+
+            setMembers(eligibleMembers);
+
             if (initialMemberId) {
-              setFormData((prev) => ({ ...prev, member_id: initialMemberId }));
-            } else if (memRes.members.length > 0 && !formData.member_id) {
-              setFormData((prev) => ({ ...prev, member_id: memRes.members[0].member_id }));
+              const isInitialEligible = eligibleMembers.some(
+                (m) => String(m.member_id) === String(initialMemberId) || String(m.id) === String(initialMemberId)
+              );
+              if (isInitialEligible) {
+                setFormData((prev) => ({ ...prev, member_id: initialMemberId }));
+              } else {
+                setFormData((prev) => ({
+                  ...prev,
+                  member_id: eligibleMembers.length > 0 ? (eligibleMembers[0].member_id || eligibleMembers[0].id) : '',
+                }));
+                setError(t('modals.memberHasActiveLoan', 'This member already has an active loan with an outstanding balance.'));
+              }
+            } else if (eligibleMembers.length > 0 && !formData.member_id) {
+              setFormData((prev) => ({ ...prev, member_id: eligibleMembers[0].member_id || eligibleMembers[0].id }));
             }
           }
 
@@ -127,6 +165,12 @@ const CreateLoanModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     if (e) e.preventDefault();
     if (!formData.member_id) {
       setError(t('modals.selectMemberAndAmount', 'Please select a member and enter loan amount.'));
+      return;
+    }
+
+    const isMemberEligible = members.some((m) => String(m.member_id) === String(formData.member_id) || String(m.id) === String(formData.member_id));
+    if (!isMemberEligible) {
+      setError(t('modals.memberHasActiveLoan', 'This member already has an active loan with an outstanding balance.'));
       return;
     }
 

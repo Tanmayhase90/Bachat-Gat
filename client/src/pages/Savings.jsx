@@ -212,11 +212,6 @@ const Savings = () => {
             icon={PiggyBank}
             title={t('savings.noSavingsRecorded')}
             description={t('savings.noSavingsRecorded')}
-            actionText={isAdmin ? t('savings.recordSavingsBtn') : undefined}
-            onAction={() => openRecordSavings({
-              month: selectedMonth ? Number(selectedMonth) : (currentDate.getMonth() + 1),
-              year: selectedYear ? Number(selectedYear) : currentDate.getFullYear(),
-            })}
           />
         ) : (
           <div className="table-responsive">

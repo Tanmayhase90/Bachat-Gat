@@ -5,9 +5,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { memberService } from '../services/memberService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
-import RecordSavingsModal from '../components/forms/RecordSavingsModal';
+import RecordSavingsAndLoanModal from '../components/forms/RecordSavingsAndLoanModal';
 import CreateLoanModal from '../components/forms/CreateLoanModal';
-import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
 import EditMemberModal from '../components/forms/EditMemberModal';
 import DeleteMemberModal from '../components/forms/DeleteMemberModal';
 import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
@@ -523,8 +522,8 @@ const MemberDetails = () => {
         </div>
       )}
 
-      {/* Action Modals */}
-      <RecordSavingsModal
+      {/* Unified Recording Modals */}
+      <RecordSavingsAndLoanModal
         key={`member-details-savings-modal-${id}-${selectedMonth || ''}-${selectedYear || ''}-${isSavingsOpen}`}
         isOpen={isSavingsOpen}
         onClose={() => setIsSavingsOpen(false)}
@@ -532,6 +531,7 @@ const MemberDetails = () => {
         initialMemberId={id}
         initialMonth={selectedMonth}
         initialYear={selectedYear}
+        initialMode="savings"
       />
 
       <CreateLoanModal
@@ -541,14 +541,17 @@ const MemberDetails = () => {
         initialMemberId={id}
       />
 
-      <RecordRepaymentModal
+      <RecordSavingsAndLoanModal
+        key={`member-details-repay-modal-${id}-${selectedLoanId || ''}-${isRepayOpen}`}
         isOpen={isRepayOpen}
         onClose={() => {
           setIsRepayOpen(false);
           setSelectedLoanId(null);
         }}
         onSuccess={fetchMember}
+        initialMemberId={id}
         initialLoanId={selectedLoanId}
+        initialMode="loan"
       />
 
       <EditMemberModal

@@ -685,3 +685,173 @@ export const normalizeActivity = (id, data = {}) => {
     year: year ? Number(year) : undefined,
   };
 };
+
+/**
+ * Safely parse date components { year, month, day } from string, Date, or Firestore Timestamp
+ */
+export const parseDateComponents = (dateInput) => {
+  if (!dateInput) return null;
+  if (typeof dateInput === 'object') {
+    if (typeof dateInput.toDate === 'function') {
+      const d = dateInput.toDate();
+      return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+    }
+    if (dateInput.seconds !== undefined) {
+      const d = new Date(dateInput.seconds * 1000);
+      return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+    }
+    if (dateInput instanceof Date) {
+      return { year: dateInput.getFullYear(), month: dateInput.getMonth() + 1, day: dateInput.getDate() };
+    }
+  }
+  const str = String(dateInput).trim();
+  const match = str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    return {
+      year: parseInt(match[1], 10),
+      month: parseInt(match[2], 10),
+      day: parseInt(match[3], 10),
+    };
+  }
+  const d = new Date(str);
+  if (!isNaN(d.getTime())) {
+    return { year: d.getFullYear(), month: d.getMonth() + 1, day: d.getDate() };
+  }
+  return null;
+};
+
+const ELIGIBILITY_MONTHS_EN = [
+  '', 'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+const ELIGIBILITY_MONTHS_MR = [
+  '', 'जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून',
+  'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'
+];
+
+/**
+ * Calculate loan repayment eligibility based on loan issue date and group monthly hafta due date.
+ * Business Rule:
+ * When a new loan is issued to a member during the current month, that member must NOT be allowed
+ * to make a loan repayment before the group's configured Monthly Hafta Due Date in the NEXT applicable month.
+ */
+export const calculateLoanRepaymentEligibility = ({
+  loan,
+  monthlyHaftaDay = 10,
+  paymentDate = null,
+  selectedMonth = null,
+  selectedYear = null,
+  language = 'en',
+} = {}) => {
+  if (!loan) {
+    return {
+      isEligible: true,
+      eligibleStartDate: null,
+      eligibleDateFormatted: '',
+      message: '',
+      reason: '',
+    };
+  }
+
+  const pendingPrincipal = Number(
+    loan.pendingPrincipal !== undefined ? loan.pendingPrincipal :
+    loan.remainingAmount !== undefined ? loan.remainingAmount :
+    loan.remainingPrincipal !== undefined ? loan.remainingPrincipal :
+    loan.outstanding_amount || 0
+  );
+  if ((loan.status || '').toUpperCase() === 'CLOSED' || pendingPrincipal <= 0) {
+    return {
+      isEligible: false,
+      eligibleStartDate: null,
+      eligibleDateFormatted: '',
+      message: language === 'mr' ? 'हे कर्ज आधीच बंद झाले आहे.' : 'This loan is already closed.',
+      reason: 'LOAN_CLOSED',
+    };
+  }
+
+  // 1. Parse loan issue date
+  const issueRaw = loan.issueDate || loan.loanDate || loan.loan_date || loan.createdAt || loan.date;
+  const issueComps = parseDateComponents(issueRaw) || parseDateComponents(new Date());
+  const issueYear = issueComps.year;
+  const issueMonth = issueComps.month;
+
+  // 2. Next applicable month & year
+  let eligibleYear = issueYear;
+  let eligibleMonth = issueMonth + 1;
+  if (eligibleMonth > 12) {
+    eligibleMonth = 1;
+    eligibleYear += 1;
+  }
+
+  const safeHaftaDay = Math.min(28, Math.max(1, parseInt(monthlyHaftaDay, 10) || 10));
+  const eligibleDay = safeHaftaDay;
+
+  // 3. Earliest eligible start date
+  const eligibleStartDate = new Date(eligibleYear, eligibleMonth - 1, eligibleDay, 0, 0, 0, 0);
+  const eligibleDateFormattedEn = `${eligibleDay} ${ELIGIBILITY_MONTHS_EN[eligibleMonth] || ''} ${eligibleYear}`;
+  const eligibleDateFormattedMr = `${eligibleDay} ${ELIGIBILITY_MONTHS_MR[eligibleMonth] || ''} ${eligibleYear}`;
+  const eligibleDateFormatted = language === 'mr' ? eligibleDateFormattedMr : eligibleDateFormattedEn;
+
+  const messageEn = `Loan repayment will be available from ${eligibleDateFormattedEn}.`;
+  const messageMr = `कर्ज परतफेड ${eligibleDateFormattedMr} पासून उपलब्ध होईल.`;
+  const message = language === 'mr' ? messageMr : messageEn;
+
+  // 4. Validate against selected accounting month & year (if specified)
+  if (selectedMonth !== null && selectedMonth !== undefined && selectedMonth !== '' &&
+      selectedYear !== null && selectedYear !== undefined && selectedYear !== '') {
+    const selM = parseInt(selectedMonth, 10);
+    const selY = parseInt(selectedYear, 10);
+    const selectedPeriodKey = selY * 100 + selM;
+    const eligiblePeriodKey = eligibleYear * 100 + eligibleMonth;
+    if (selectedPeriodKey < eligiblePeriodKey) {
+      return {
+        isEligible: false,
+        eligibleStartDate,
+        eligibleDateFormatted,
+        eligibleDateFormattedEn,
+        eligibleDateFormattedMr,
+        eligibleYear,
+        eligibleMonth,
+        eligibleDay,
+        message,
+        reason: 'BEFORE_ELIGIBLE_PERIOD',
+      };
+    }
+  }
+
+  // 5. Validate against payment date / reference date
+  const refComps = parseDateComponents(paymentDate || new Date());
+  if (refComps) {
+    const refKey = refComps.year * 10000 + refComps.month * 100 + refComps.day;
+    const eligibleKey = eligibleYear * 10000 + eligibleMonth * 100 + eligibleDay;
+    if (refKey < eligibleKey) {
+      return {
+        isEligible: false,
+        eligibleStartDate,
+        eligibleDateFormatted,
+        eligibleDateFormattedEn,
+        eligibleDateFormattedMr,
+        eligibleYear,
+        eligibleMonth,
+        eligibleDay,
+        message,
+        reason: 'BEFORE_ELIGIBLE_DATE',
+      };
+    }
+  }
+
+  return {
+    isEligible: true,
+    eligibleStartDate,
+    eligibleDateFormatted,
+    eligibleDateFormattedEn,
+    eligibleDateFormattedMr,
+    eligibleYear,
+    eligibleMonth,
+    eligibleDay,
+    message: '',
+    reason: 'ELIGIBLE',
+  };
+};
+

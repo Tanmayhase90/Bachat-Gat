@@ -12,6 +12,26 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+const isSettledRow = (r) => Boolean(
+  r?.isSettled ||
+  r?.is_settled ||
+  r?.isDeleted ||
+  r?.is_deleted ||
+  (r?.status || '').toUpperCase() === 'SETTLED' ||
+  (r?.status || '').toUpperCase() === 'DELETED'
+);
+
+const sortMemberRecords = (a, b) => {
+  const idA = a.memberCode || a.member_code || a.memberId || a.member_id || a.id || '';
+  const idB = b.memberCode || b.member_code || b.memberId || b.member_id || b.id || '';
+  const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
+  const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
+  if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+  if (!isNaN(numA)) return -1;
+  if (!isNaN(numB)) return 1;
+  return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
+};
+
 const FinancialReportDocument = ({
   groupInfo,
   monthlyData,
@@ -172,24 +192,19 @@ const FinancialReportDocument = ({
       {/* 3. Member-Wise Monthly Register Table */}
       <div className="report-section">
         {(() => {
-          const registerList = [...(collections || [])].sort((a, b) => {
-            const idA = a.memberCode || a.member_code || a.memberId || a.member_id || a.id || '';
-            const idB = b.memberCode || b.member_code || b.memberId || b.member_id || b.id || '';
-            const numA = parseInt(String(idA).replace(/\D/g, ''), 10);
-            const numB = parseInt(String(idB).replace(/\D/g, ''), 10);
-            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-            if (!isNaN(numA)) return -1;
-            if (!isNaN(numB)) return 1;
-            return String(idA).localeCompare(String(idB), undefined, { numeric: true, sensitivity: 'base' });
-          });
-          const totalSavingsSum = registerList.reduce((acc, r) => acc + (r.savingsAmount || r.savings_amount || r.paid_amount || 0), 0);
-          const totalLoanPrincipalSum = registerList.reduce((acc, r) => acc + (r.loanPrincipal || r.loan_principal || 0), 0);
-          const totalInterestSum = registerList.reduce((acc, r) => acc + (r.interestPaid || r.interest_paid || r.interestAmount || 0), 0);
-          const totalPrincipalRepaidSum = registerList.reduce((acc, r) => acc + (r.principalRepaid || r.principal_repaid || 0), 0);
-          const totalPaymentSum = registerList.reduce((acc, r) => acc + (r.totalPayment || r.total_payment || r.amount || 0), 0);
-          const totalOutstandingSum = registerList.reduce((acc, r) => acc + (r.outstandingLoan || r.outstanding_loan || 0), 0);
-          const paidCount = registerList.filter((r) => (r.paid_amount || r.paidAmount || 0) >= (r.expected_amount || r.expectedAmount || r.savingsAmount || 0)).length;
-          const pendingCount = registerList.filter((r) => (r.paid_amount || r.paidAmount || 0) < (r.expected_amount || r.expectedAmount || r.savingsAmount || 0)).length;
+          const rawCollections = collections || [];
+          const activeRows = rawCollections.filter(r => !isSettledRow(r)).sort(sortMemberRecords);
+          const settledRows = rawCollections.filter(r => isSettledRow(r)).sort(sortMemberRecords);
+          const registerList = [...activeRows, ...settledRows];
+
+          const totalSavingsSum = activeRows.reduce((acc, r) => acc + (r.savingsAmount || r.savings_amount || r.paid_amount || 0), 0);
+          const totalLoanPrincipalSum = activeRows.reduce((acc, r) => acc + (r.loanPrincipal || r.loan_principal || 0), 0);
+          const totalInterestSum = activeRows.reduce((acc, r) => acc + (r.interestPaid || r.interest_paid || r.interestAmount || 0), 0);
+          const totalPrincipalRepaidSum = activeRows.reduce((acc, r) => acc + (r.principalRepaid || r.principal_repaid || 0), 0);
+          const totalPaymentSum = activeRows.reduce((acc, r) => acc + (r.totalPayment || r.total_payment || r.amount || 0), 0);
+          const totalOutstandingSum = activeRows.reduce((acc, r) => acc + (r.outstandingLoan || r.outstanding_loan || 0), 0);
+          const paidCount = activeRows.filter((r) => (r.paid_amount || r.paidAmount || 0) >= (r.expected_amount || r.expectedAmount || r.savingsAmount || 0)).length;
+          const pendingCount = activeRows.filter((r) => (r.paid_amount || r.paidAmount || 0) < (r.expected_amount || r.expectedAmount || r.savingsAmount || 0)).length;
 
           return (
             <>
@@ -207,16 +222,16 @@ const FinancialReportDocument = ({
                   {language === 'mr' ? 'निवडलेल्या महिन्यासाठी कोणतीही नोंद आढळली नाही.' : 'No records found for this selected month.'}
                 </div>
               ) : (
-                <div className="table-responsive report-table-wrap" style={{ maxHeight: '650px', overflowY: 'auto' }}>
+                <div id="monthly-register-table-wrap" className="table-responsive report-table-wrap" style={{ maxHeight: '650px', overflowY: 'auto' }}>
                   <table className="custom-table" style={{ fontSize: '0.825rem', width: '100%' }}>
                     <thead>
                       <tr>
                         <th style={{ width: '35px', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>#</th>
                         <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('reports.tableMemberName', 'Member Name')}</th>
-                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('members.tableMonthlyShare', 'Monthly Savings')}</th>
                         <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('modals.loanAmount', 'Loan Principal')}</th>
                         <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('loans.tableMonthlyInterest', 'Monthly Interest')}</th>
                         <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('loans.tablePaidPrincipal', 'Principal Repaid')}</th>
+                        <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('members.tableMonthlyShare', 'Monthly Savings')}</th>
                         <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('modals.totalPayment', 'Total Payment')}</th>
                         <th style={{ textAlign: 'right', position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('reports.tableLoanOutstanding', 'Outstanding Loan')}</th>
                         <th style={{ position: 'sticky', top: 0, zIndex: 10, background: '#F8FAFC', boxShadow: 'inset 0 -1.5px 0 var(--border-color)' }}>{t('memberDetails.paymentDate', 'Payment Date')}</th>
@@ -226,6 +241,7 @@ const FinancialReportDocument = ({
                     </thead>
                     <tbody>
                       {registerList.map((c, idx) => {
+                        const isSettled = isSettledRow(c);
                         const sAmt = c.savingsAmount !== undefined ? c.savingsAmount : (c.savings_amount !== undefined ? c.savings_amount : (c.expected_amount || c.expectedAmount || 0));
                         const lPrin = c.loanPrincipal || c.loan_principal || 0;
                         const iAmt = c.interestPaid || c.interest_paid || c.interestAmount || 0;
@@ -238,44 +254,69 @@ const FinancialReportDocument = ({
                         const pAmt = c.pendingAmount !== undefined ? c.pendingAmount : (pLoan + pHafta);
 
                         return (
-                          <tr key={c.id || c.memberId || idx}>
-                            <td style={{ color: 'var(--text-muted)' }}>{idx + 1}</td>
-                            <td style={{ fontWeight: 700 }}>{c.memberName || c.member_name}</td>
-                            <td style={{ textAlign: 'right', fontWeight: 600, color: sAmt > 0 ? 'var(--primary)' : 'var(--text-muted)' }}>
-                              {formatCurrency(sAmt)}
-                            </td>
-                            <td style={{ textAlign: 'right', color: lPrin > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                          <tr
+                            key={c.id || c.memberId || idx}
+                            style={isSettled ? {
+                              backgroundColor: '#FEF2F2',
+                              borderBottom: '1px solid #FECACA',
+                              color: '#DC2626',
+                            } : undefined}
+                          >
+                            <td style={{ color: isSettled ? '#DC2626' : 'var(--text-muted)', fontWeight: isSettled ? 700 : 400 }}>{idx + 1}</td>
+                            <td style={{ fontWeight: 700, color: isSettled ? '#DC2626' : 'inherit' }}>{c.memberName || c.member_name}</td>
+                            <td style={{ textAlign: 'right', color: isSettled ? '#DC2626' : (lPrin > 0 ? 'var(--text-primary)' : 'var(--text-muted)') }}>
                               {lPrin > 0 ? formatCurrency(lPrin) : '-'}
                             </td>
-                            <td style={{ textAlign: 'right', color: iAmt > 0 ? 'var(--success-text)' : 'var(--text-muted)', fontWeight: iAmt > 0 ? 600 : 400 }}>
+                            <td style={{ textAlign: 'right', color: isSettled ? '#DC2626' : (iAmt > 0 ? 'var(--success-text)' : 'var(--text-muted)'), fontWeight: (isSettled || iAmt > 0) ? 600 : 400 }}>
                               {iAmt > 0 ? formatCurrency(iAmt) : '-'}
                             </td>
-                            <td style={{ textAlign: 'right', color: pRepaid > 0 ? 'var(--info)' : 'var(--text-muted)', fontWeight: pRepaid > 0 ? 600 : 400 }}>
+                            <td style={{ textAlign: 'right', color: isSettled ? '#DC2626' : (pRepaid > 0 ? 'var(--info)' : 'var(--text-muted)'), fontWeight: (isSettled || pRepaid > 0) ? 600 : 400 }}>
                               {pRepaid > 0 ? formatCurrency(pRepaid) : '-'}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: 800, color: tPay > 0 ? 'var(--primary)' : 'var(--danger-text)' }}>
+                            <td style={{ textAlign: 'right', fontWeight: 600, color: isSettled ? '#DC2626' : (sAmt > 0 ? 'var(--primary)' : 'var(--text-muted)') }}>
+                              {formatCurrency(sAmt)}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: 800, color: isSettled ? '#DC2626' : (tPay > 0 ? 'var(--primary)' : 'var(--danger-text)') }}>
                               {formatCurrency(tPay)}
                             </td>
-                            <td style={{ textAlign: 'right', fontWeight: outLoan > 0 ? 700 : 400, color: outLoan > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
+                            <td style={{ textAlign: 'right', fontWeight: (isSettled || outLoan > 0) ? 700 : 400, color: isSettled ? '#DC2626' : (outLoan > 0 ? 'var(--danger-text)' : 'var(--text-muted)') }}>
                               {outLoan > 0 ? formatCurrency(outLoan) : '-'}
                             </td>
-                            <td>{c.paymentDate || c.payment_date ? formatDate(c.paymentDate || c.payment_date) : '-'}</td>
-                            <td style={{ textAlign: 'right', fontWeight: pAmt > 0 ? 700 : 400, color: pAmt > 0 ? 'var(--danger-text)' : 'var(--text-muted)' }}>
+                            <td style={{ color: isSettled ? '#DC2626' : 'inherit' }}>
+                              {c.paymentDate || c.payment_date ? formatDate(c.paymentDate || c.payment_date) : '-'}
+                            </td>
+                            <td style={{ textAlign: 'right', fontWeight: (isSettled || pAmt > 0) ? 700 : 400, color: isSettled ? '#DC2626' : (pAmt > 0 ? 'var(--danger-text)' : 'var(--text-muted)') }}>
                               {formatCurrency(pAmt)}
                             </td>
                             <td>
-                              <span
-                                className={`badge ${
-                                  c.status === 'PAID'
-                                    ? 'badge-success'
-                                    : c.status === 'PARTIAL'
-                                    ? 'badge-warning'
-                                    : 'badge-danger'
-                                }`}
-                                style={{ fontSize: '0.7rem' }}
-                              >
-                                {c.status}
-                              </span>
+                              {isSettled ? (
+                                <span
+                                  className="badge"
+                                  style={{
+                                    fontSize: '0.7rem',
+                                    backgroundColor: '#FEE2E2',
+                                    color: '#DC2626',
+                                    border: '1px solid #FCA5A5',
+                                    fontWeight: 800,
+                                    letterSpacing: '0.03em',
+                                  }}
+                                >
+                                  SETTLED
+                                </span>
+                              ) : (
+                                <span
+                                  className={`badge ${
+                                    c.status === 'PAID'
+                                      ? 'badge-success'
+                                      : c.status === 'PARTIAL'
+                                      ? 'badge-warning'
+                                      : 'badge-danger'
+                                  }`}
+                                  style={{ fontSize: '0.7rem' }}
+                                >
+                                  {c.status}
+                                </span>
+                              )}
                             </td>
                           </tr>
                         );
@@ -284,10 +325,7 @@ const FinancialReportDocument = ({
                     <tfoot>
                       <tr style={{ background: '#F8FAFC', fontWeight: 800, borderTop: '2px solid var(--border-color)' }}>
                         <td colSpan={2} style={{ fontWeight: 800, fontSize: '0.9rem' }}>
-                          {t('common.grandTotal', 'GRAND TOTAL')} ({registerList.length} {language === 'mr' ? 'सभासद' : 'Members'})
-                        </td>
-                        <td style={{ textAlign: 'right', color: 'var(--primary)' }}>
-                          {formatCurrency(totalSavingsSum)}
+                          {t('common.grandTotal', 'GRAND TOTAL')} ({activeRows.length} {language === 'mr' ? 'सभासद' : 'Members'})
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           {totalLoanPrincipalSum > 0 ? formatCurrency(totalLoanPrincipalSum) : '-'}
@@ -297,6 +335,9 @@ const FinancialReportDocument = ({
                         </td>
                         <td style={{ textAlign: 'right', color: 'var(--info)' }}>
                           {totalPrincipalRepaidSum > 0 ? formatCurrency(totalPrincipalRepaidSum) : '-'}
+                        </td>
+                        <td style={{ textAlign: 'right', color: 'var(--primary)' }}>
+                          {formatCurrency(totalSavingsSum)}
                         </td>
                         <td style={{ textAlign: 'right', color: 'var(--primary)', fontSize: '0.95rem', fontWeight: 900 }}>
                           {formatCurrency(totalPaymentSum)}

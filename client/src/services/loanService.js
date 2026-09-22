@@ -16,8 +16,11 @@ import {
   normalizeMember,
   normalizeSavings,
   isRegularMember,
+  calculateLoanRepaymentEligibility,
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
+
+export { calculateLoanRepaymentEligibility };
 
 export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_ID) {
   const targetGroupId = groupId || DEFAULT_GROUP_ID;
@@ -82,7 +85,7 @@ export async function calculateCurrentAvailableBalance(groupId = DEFAULT_GROUP_I
   const loansList = loansSnap.docs.map((d) => {
     const loanId = d.id;
     const raw = d.data();
-    const loanRepays = repaymentsByLoan[loanId] || repaymentsByLoan[raw.loanId] || [];
+    const loanRepays = repaymentsByLoan[loanId] || repaymentsByLoan[raw.loanId] || repaymentsByLoan[raw.loan_id] || repaymentsByLoan[raw.id] || [];
     return normalizeLoan(loanId, raw, loanRepays);
   });
 
@@ -197,7 +200,7 @@ export const loanService = {
 
       const allLoans = loansSnap.docs.map((docSnap) => {
         const raw = docSnap.data();
-        const loanRepays = repaymentsByLoan[docSnap.id] || repaymentsByLoan[raw.loanId] || [];
+        const loanRepays = repaymentsByLoan[docSnap.id] || repaymentsByLoan[raw.loanId] || repaymentsByLoan[raw.loan_id] || repaymentsByLoan[raw.id] || [];
         const normalized = normalizeLoan(docSnap.id, raw, loanRepays);
         const memInfo = membersMap[normalized.memberId] || { name: normalized.memberName, code: normalized.memberCode };
 
@@ -571,6 +574,68 @@ export const loanService = {
 
       if ((loanData.status || 'active').toLowerCase() !== 'active') {
         throw new Error('This loan is already closed.');
+      }
+
+      const isSettlement = Boolean(repayData.isSettlement || remarks.toLowerCase().includes('settlement'));
+
+      // 1. Repayment Eligibility (Start Date / Due-Date) Protection
+      // When a new loan is issued, repayment is NOT allowed before the configured Monthly Hafta Due Date in the NEXT applicable month.
+      if (!isSettlement) {
+        let groupHaftaDay = repayData.monthlyHaftaDay || repayData.monthly_hafta_day;
+        if (!groupHaftaDay) {
+          const groupSnap = await getDoc(doc(db, 'groups', targetGroupId)).catch(() => null);
+          const gData = groupSnap?.exists() ? groupSnap.data() : {};
+          groupHaftaDay = gData.monthly_hafta_day ?? gData.monthlyHaftaDay ?? 10;
+        }
+
+        const eligibility = calculateLoanRepaymentEligibility({
+          loan: loanData,
+          monthlyHaftaDay: groupHaftaDay,
+          paymentDate,
+          selectedMonth: month,
+          selectedYear: year,
+          language: repayData.language || 'en',
+        });
+
+        if (!eligibility.isEligible) {
+          throw new Error(eligibility.message);
+        }
+      }
+
+      // 2. Duplicate Monthly Repayment Protection
+      // A member/loan can have ONLY ONE loan repayment per calendar month (month + year).
+      if (!isSettlement) {
+        const altLoanId = loanData.loanId || loanData.loan_id;
+        const queryPromises = [
+          getDocs(query(collection(db, 'groups', targetGroupId, 'repayments'), where('loanId', '==', loanId))).catch(() => ({ docs: [] })),
+          getDocs(query(collection(db, 'groups', targetGroupId, 'repayments'), where('loan_id', '==', loanId))).catch(() => ({ docs: [] })),
+        ];
+        if (altLoanId && altLoanId !== loanId) {
+          queryPromises.push(
+            getDocs(query(collection(db, 'groups', targetGroupId, 'repayments'), where('loanId', '==', altLoanId))).catch(() => ({ docs: [] })),
+            getDocs(query(collection(db, 'groups', targetGroupId, 'repayments'), where('loan_id', '==', altLoanId))).catch(() => ({ docs: [] }))
+          );
+        }
+        const querySnapshots = await Promise.all(queryPromises);
+        const seenDocIds = new Set();
+        for (const snap of querySnapshots) {
+          for (const d of snap.docs) {
+            if (seenDocIds.has(d.id)) continue;
+            seenDocIds.add(d.id);
+            const r = d.data();
+            const rMonth = parseInt(r.payment_month ?? r.paymentMonth ?? r.month, 10);
+            const rYear = parseInt(r.payment_year ?? r.paymentYear ?? r.year, 10);
+            if (rMonth === month && rYear === year) {
+              throw new Error('Already repayment recorded for this month. Try next month.');
+            }
+            if ((isNaN(rMonth) || isNaN(rYear)) && (r.paymentDate || r.payment_date)) {
+              const pd = new Date(r.paymentDate || r.payment_date);
+              if (!isNaN(pd.getTime()) && (pd.getMonth() + 1) === month && pd.getFullYear() === year) {
+                throw new Error('Already repayment recorded for this month. Try next month.');
+              }
+            }
+          }
+        }
       }
 
       if (principalRepay < 0) {

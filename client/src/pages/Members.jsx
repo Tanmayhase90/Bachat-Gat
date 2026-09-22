@@ -6,7 +6,7 @@ import { memberService } from '../services/memberService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import AddMemberModal from '../components/forms/AddMemberModal';
-import RecordSavingsModal from '../components/forms/RecordSavingsModal';
+import RecordSavingsAndLoanModal from '../components/forms/RecordSavingsAndLoanModal';
 import { formatCurrency, formatDate, formatNumber, formatMonthYear, formatMonthlyHaftaDueDate, compareMemberNumericOrder } from '../utils/formatters';
 import {
   Users,
@@ -631,8 +631,8 @@ const Members = () => {
         onSuccess={handleSuccess}
       />
 
-      {/* Record Savings Modal */}
-      <RecordSavingsModal
+      {/* Unified Single Recording Modal */}
+      <RecordSavingsAndLoanModal
         key={`members-savings-modal-${savingsModalProps.memberId || ''}-${savingsModalProps.month || selectedMonth}-${savingsModalProps.year || selectedYear}-${isRecordSavingsModalOpen}`}
         isOpen={isRecordSavingsModalOpen}
         onClose={() => {

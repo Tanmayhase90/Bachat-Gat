@@ -3,9 +3,8 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 import AddMemberModal from '../forms/AddMemberModal';
-import RecordSavingsModal from '../forms/RecordSavingsModal';
+import RecordSavingsAndLoanModal from '../forms/RecordSavingsAndLoanModal';
 import CreateLoanModal from '../forms/CreateLoanModal';
-import RecordRepaymentModal from '../forms/RecordRepaymentModal';
 import { licenseService } from '../../services/licenseService';
 import { backupService } from '../../services/backupService';
 import {
@@ -17,10 +16,9 @@ import {
 const MainLayout = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-  const [isRecordSavingsOpen, setIsRecordSavingsOpen] = useState(false);
-  const [recordSavingsOptions, setRecordSavingsOptions] = useState({});
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [recordModalOptions, setRecordModalOptions] = useState({});
   const [isCreateLoanOpen, setIsCreateLoanOpen] = useState(false);
-  const [isRecordRepaymentOpen, setIsRecordRepaymentOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Licence & Auto Backup state
@@ -57,9 +55,9 @@ const MainLayout = () => {
     setRefreshTrigger((prev) => prev + 1);
   };
 
-  const handleOpenRecordSavings = (options = {}) => {
-    setRecordSavingsOptions(options || {});
-    setIsRecordSavingsOpen(true);
+  const handleOpenRecordModal = (options = {}) => {
+    setRecordModalOptions(options || {});
+    setIsRecordModalOpen(true);
   };
 
   return (
@@ -78,9 +76,9 @@ const MainLayout = () => {
         <Header
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onOpenAddMember={() => setIsAddMemberOpen(true)}
-          onOpenRecordSavings={() => handleOpenRecordSavings()}
+          onOpenRecordSavings={() => handleOpenRecordModal({ mode: 'savings' })}
           onOpenCreateLoan={() => setIsCreateLoanOpen(true)}
-          onOpenRecordRepayment={() => setIsRecordRepaymentOpen(true)}
+          onOpenRecordRepayment={() => handleOpenRecordModal({ mode: 'loan' })}
         />
 
         <main className="page-body">
@@ -89,9 +87,9 @@ const MainLayout = () => {
               refreshTrigger,
               triggerRefresh,
               openAddMember: () => setIsAddMemberOpen(true),
-              openRecordSavings: handleOpenRecordSavings,
+              openRecordSavings: handleOpenRecordModal,
               openCreateLoan: () => setIsCreateLoanOpen(true),
-              openRecordRepayment: () => setIsRecordRepaymentOpen(true),
+              openRecordRepayment: (options = {}) => handleOpenRecordModal({ ...options, mode: 'loan' }),
             }}
           />
         </main>
@@ -104,28 +102,24 @@ const MainLayout = () => {
         onSuccess={triggerRefresh}
       />
 
-      <RecordSavingsModal
-        key={`global-savings-modal-${recordSavingsOptions.memberId || ''}-${recordSavingsOptions.month || ''}-${recordSavingsOptions.year || ''}-${isRecordSavingsOpen}`}
-        isOpen={isRecordSavingsOpen}
+      <RecordSavingsAndLoanModal
+        key={`global-savings-loan-modal-${recordModalOptions.memberId || recordModalOptions.initialMemberId || ''}-${recordModalOptions.loanId || recordModalOptions.initialLoanId || ''}-${recordModalOptions.month || ''}-${recordModalOptions.year || ''}-${isRecordModalOpen}`}
+        isOpen={isRecordModalOpen}
         onClose={() => {
-          setIsRecordSavingsOpen(false);
-          setRecordSavingsOptions({});
+          setIsRecordModalOpen(false);
+          setRecordModalOptions({});
         }}
         onSuccess={triggerRefresh}
-        initialMemberId={recordSavingsOptions.memberId || recordSavingsOptions.initialMemberId || null}
-        initialMonth={recordSavingsOptions.month || recordSavingsOptions.selectedMonth || recordSavingsOptions.initialMonth || null}
-        initialYear={recordSavingsOptions.year || recordSavingsOptions.selectedYear || recordSavingsOptions.initialYear || null}
+        initialMemberId={recordModalOptions.memberId || recordModalOptions.initialMemberId || null}
+        initialLoanId={recordModalOptions.loanId || recordModalOptions.initialLoanId || null}
+        initialMonth={recordModalOptions.month || recordModalOptions.selectedMonth || recordModalOptions.initialMonth || null}
+        initialYear={recordModalOptions.year || recordModalOptions.selectedYear || recordModalOptions.initialYear || null}
+        initialMode={recordModalOptions.mode || 'savings'}
       />
 
       <CreateLoanModal
         isOpen={isCreateLoanOpen}
         onClose={() => setIsCreateLoanOpen(false)}
-        onSuccess={triggerRefresh}
-      />
-
-      <RecordRepaymentModal
-        isOpen={isRecordRepaymentOpen}
-        onClose={() => setIsRecordRepaymentOpen(false)}
         onSuccess={triggerRefresh}
       />
 

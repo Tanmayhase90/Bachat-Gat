@@ -240,8 +240,8 @@ export const reportService = {
       const reportMembers = [...activeMembers, ...historicalMembers];
       reportMembers.sort(compareMemberNumericOrder);
 
-      // Monthly target reflecting members in this month's register
-      const monthlyTarget = reportMembers.reduce(
+      // Monthly target reflecting active regular members in this month's register
+      const monthlyTarget = activeMembers.reduce(
         (sum, mem) => sum + (Number(mem.shares || mem.shareCount || 1) * monthlyContributionPerShare),
         0
       );
@@ -279,6 +279,15 @@ export const reportService = {
         const pendingHafta = Math.max(0, memberMonthlySavings - paidSavings);
         const pendingLoan = outstandingLoan;
         const pendingAmount = pendingLoan + pendingHafta;
+
+        const isSettled = Boolean(
+          mem.isDeleted ||
+          mem.deleted ||
+          mem.is_deleted ||
+          (mem.status || '').toUpperCase() === 'DELETED' ||
+          (mem.status || '').toUpperCase() === 'SETTLED' ||
+          mem.settlementId
+        );
 
         return {
           id: mem.id,
@@ -322,11 +331,17 @@ export const reportService = {
           pendingAmount: pendingAmount,
           month: m,
           year: y,
-          status: paidSavings >= memberMonthlySavings
-            ? 'PAID'
-            : paidSavings > 0
-            ? 'PARTIAL'
-            : 'PENDING',
+          status: isSettled
+            ? 'SETTLED'
+            : (paidSavings >= memberMonthlySavings
+              ? 'PAID'
+              : paidSavings > 0
+              ? 'PARTIAL'
+              : 'PENDING'),
+          isDeleted: isSettled,
+          is_deleted: isSettled,
+          isSettled: isSettled,
+          is_settled: isSettled,
           payment_date: paymentDate,
           paymentDate: paymentDate,
           payment_mode: paymentMode,
@@ -334,13 +349,14 @@ export const reportService = {
         };
       });
 
-      const totalPaidMembers = memberCollections.filter((m) => {
+      const activeCollections = memberCollections.filter((m) => !m.isSettled && !m.isDeleted);
+      const totalPaidMembers = activeCollections.filter((m) => {
         const pAmt = m.paid_amount !== undefined ? m.paid_amount : (m.paidAmount || 0);
         const exp = Number(m.expected_amount || m.expectedAmount || 0);
         return pAmt >= exp;
       }).length;
 
-      const totalPendingMembers = memberCollections.filter((m) => {
+      const totalPendingMembers = activeCollections.filter((m) => {
         const pAmt = m.paid_amount !== undefined ? m.paid_amount : (m.paidAmount || 0);
         const exp = Number(m.expected_amount || m.expectedAmount || 0);
         return pAmt < exp;

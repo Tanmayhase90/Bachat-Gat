@@ -1,0 +1,20 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1920
+PlayResY: 1080
+WrapStyle: 0
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: MarathiSub,Nirmala UI,32,&H00181C22,&H000000FF,&H00FFFFFF,&H40000000,-1,0,0,0,100,100,0,0,1,1.8,0.8,2,80,80,132,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:07.47,MarathiSub,,0,0,0,,नमस्कार आणि छत्रपती बचत गट डिजिटल व्यवस्थापन प्रणालीच्या प्रकल्प सादरीकरणामध्ये आपले सहर्ष स्वागत आहे.
+Dialogue: 0,0:00:16.50,0:00:35.10,MarathiSub,,0,0,0,,त्यामुळे हिशोबात चुका होणे, वह्या गहाळ होणे आणि पारदर्शकतेचा अभाव यांसारख्या मोठ्या अडचणी येत होत्या.\Nयावर उपाय म्हणून आम्ही हे आधुनिक, सुरक्षित आणि संपूर्ण वेब ॲप्लिकेशन विकसित केले आहे.
+Dialogue: 0,0:00:52.30,0:01:03.09,MarathiSub,,0,0,0,,आर्थिक व्यवहारांची सुरक्षा राखण्यासाठी या ॲप्लिकेशनमध्ये रोल-बेस्ड ॲक्सेस कंट्रोल लागू केले आहे,\Nज्याद्वारे केवळ अधिकृत ॲडमिनलाच व्यवस्थापनाचे अधिकार मिळतात.
+Dialogue: 0,0:01:31.89,0:01:36.63,MarathiSub,,0,0,0,,हा डॅशबोर्ड संपूर्ण बचत गटाची रिअल-टाइम आर्थिक स्थिती दर्शवतो.
+Dialogue: 0,0:02:40.99,0:02:46.40,MarathiSub,,0,0,0,,आता आपण ग्रुप सेटिंग्स आणि नियमावली विभागाचा आढावा घेऊया.
+Dialogue: 0,0:04:15.99,0:04:21.44,MarathiSub,,0,0,0,,आता आपण मासिक बचत संकलन म्हणजेच मंथली सेव्हिंग्स विभागाची पाहणी करूया.
+Dialogue: 0,0:05:40.00,0:05:50.00,MarathiSub,,0,0,0,,पहिला अहवाल आहे मासिक वित्तीय नोंदवही, म्हणजेच मंथली फायनान्शियल रजिस्टर.
+Dialogue: 0,0:07:00.00,0:07:13.60,MarathiSub,,0,0,0,,कागदी वह्यांची जागा आता एका सुरक्षित, वेगवान आणि आधुनिक डिजिटल वेब प्रणालीने घेतली आहे.

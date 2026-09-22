@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { loanService } from '../services/loanService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
-import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
+import RecordSavingsAndLoanModal from '../components/forms/RecordSavingsAndLoanModal';
 import { formatCurrency, formatDate, formatMonthYear } from '../utils/formatters';
 import {
   ArrowLeft,
@@ -208,11 +208,12 @@ const LoanDetails = () => {
         )}
       </div>
 
-      <RecordRepaymentModal
+      <RecordSavingsAndLoanModal
         isOpen={isRepayOpen}
         onClose={() => setIsRepayOpen(false)}
         onSuccess={fetchLoan}
         initialLoanId={loan.id}
+        initialMode="loan"
       />
     </div>
   );

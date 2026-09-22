@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { loanService } from '../services/loanService';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
-import RecordRepaymentModal from '../components/forms/RecordRepaymentModal';
+import RecordSavingsAndLoanModal from '../components/forms/RecordSavingsAndLoanModal';
 import { formatCurrency, formatDate, formatNumber } from '../utils/formatters';
 import {
   HandCoins,
@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const Loans = () => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const { user, isAdmin = true } = useAuth();
   const navigate = useNavigate();
   const outletContext = useOutletContext() || {};
@@ -184,8 +184,6 @@ const Loans = () => {
             icon={HandCoins}
             title={t('loans.noLoansFound')}
             description={t('loans.noLoansFound')}
-            actionText={isAdmin && activeTab === 'ACTIVE' ? t('loans.issueLoanBtn') : undefined}
-            onAction={openCreateLoan}
           />
         </div>
       ) : (
@@ -313,7 +311,7 @@ const Loans = () => {
                       className="btn-outline"
                       style={{ fontSize: '0.8rem', padding: '6px 12px' }}
                     >
-                      <CreditCard size={14} /> {t('loans.recordRepaymentBtn')}
+                      <CreditCard size={14} /> {t('loans.recordRepaymentBtn', language === 'mr' ? 'कर्ज परतफेड' : 'Record Repayment')}
                     </button>
                   )}
                 </div>
@@ -323,8 +321,8 @@ const Loans = () => {
         </div>
       )}
 
-      {/* Global Local Repayment Modal */}
-      <RecordRepaymentModal
+      {/* Unified Single Recording Modal */}
+      <RecordSavingsAndLoanModal
         isOpen={isRepayOpen}
         onClose={() => {
           setIsRepayOpen(false);
@@ -332,6 +330,7 @@ const Loans = () => {
         }}
         onSuccess={fetchLoans}
         initialLoanId={selectedLoanId}
+        initialMode="loan"
       />
     </div>
   );

@@ -144,22 +144,13 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan, on
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {/* Quick Actions */}
           <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            {canManageLoans && onOpenRecordRepayment && (
-              <button
-                onClick={onOpenRecordRepayment}
-                className="btn-outline"
-                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
-              >
-                <CreditCard size={15} /> {t('header.loanRepayment', 'Loan Repayment')}
-              </button>
-            )}
-            {canManageSavings && onOpenRecordSavings && (
+            {(canManageSavings || canManageLoans) && onOpenRecordSavings && (
               <button
                 onClick={onOpenRecordSavings}
                 className="btn-outline"
                 style={{ fontSize: '0.8rem', padding: '6px 14px' }}
               >
-                <PiggyBank size={15} /> {t('header.addSavings')}
+                <PiggyBank size={15} /> {t('header.addSavingsAndLoan', '+ Savings & Loan')}
               </button>
             )}
             {canManageLoans && onOpenCreateLoan && (

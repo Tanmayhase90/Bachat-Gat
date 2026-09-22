@@ -284,6 +284,10 @@ export const dashboardService = {
     }
   },
 
+  getDashboardSummary: async (groupId = DEFAULT_GROUP_ID, memberId = null) => {
+    return dashboardService.getSummary(groupId, memberId);
+  },
+
   /**
    * Get Monthly collection progress against target (auto-calculated dynamically from settings & members)
    */

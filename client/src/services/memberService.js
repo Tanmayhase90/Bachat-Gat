@@ -25,6 +25,7 @@ import {
   DEFAULT_GROUP_ID,
 } from '../utils/formatters.js';
 import { groupService } from './groupService.js';
+import { dashboardService } from './dashboardService.js';
 
 export { calculateMonthlyMemberStatus, isRegularMember, isNonAdminMember };
 
@@ -815,11 +816,18 @@ export const memberService = {
 
       const totalSettledInterest = settlementsSnap.docs.reduce((sum, d) => sum + Number(d.data().interestShare || d.data().interest_share || 0), 0);
 
-      const rawGroup = groupDocSnap?.exists() ? groupDocSnap.data() : {};
-      const storedGroupInterest = Number(rawGroup.totalInterest ?? rawGroup.total_interest ?? rawGroup.totalInterestCollected ?? rawGroup.total_interest_collected ?? 0);
-      
-      const dynamicTotalInterest = Math.max(0, Math.round((allContributionsInterest + allRepaymentsInterest - totalSettledInterest) * 100) / 100);
-      const totalGroupInterest = storedGroupInterest > 0 ? storedGroupInterest : dynamicTotalInterest;
+      // Single Source of Truth: Derive total interest from dashboardService (Dashboard's "Total Interest Earned")
+      let totalGroupInterest = 0;
+      try {
+        const dashRes = await dashboardService.getSummary(targetGroupId);
+        if (dashRes?.success && dashRes.summary) {
+          totalGroupInterest = Number(dashRes.summary.totalInterest ?? dashRes.summary.totalInterestEarned ?? 0);
+        } else {
+          totalGroupInterest = Math.max(0, Math.round((allContributionsInterest + allRepaymentsInterest - totalSettledInterest) * 100) / 100);
+        }
+      } catch (e) {
+        totalGroupInterest = Math.max(0, Math.round((allContributionsInterest + allRepaymentsInterest - totalSettledInterest) * 100) / 100);
+      }
 
       // Formula: interestShare = FLOOR(totalInterest / totalMemberCount)
       // Must always be a complete integer rupee amount (e.g. 395 / 366 -> 1, 1060 / 500 -> 2)

@@ -24,8 +24,8 @@ import {
   where,
   getDocs,
 } from 'firebase/firestore';
-import { auth, db, firebaseConfig } from '../config/firebase';
-import { groupService } from './groupService';
+import { auth, db, firebaseConfig } from '../config/firebase.js';
+import { groupService } from './groupService.js';
 
 /**
  * Format Firebase Auth errors into accurate, clear, user-friendly messages
@@ -269,7 +269,32 @@ export const authService = {
   login: async (email, password, expectedRole = null) => {
     try {
       const cleanEmail = (email || '').trim().toLowerCase();
-      const userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      let userCredential;
+      try {
+        userCredential = await signInWithEmailAndPassword(auth, cleanEmail, password);
+      } catch (firstErr) {
+        if (password && password.length < 6) {
+          const adaptedPasswords = [
+            `${password}#BachatGat`,
+            `${password}${password}`,
+            `${password}00`,
+            `${password}@123`,
+          ];
+          let matched = false;
+          for (const altPwd of adaptedPasswords) {
+            try {
+              userCredential = await signInWithEmailAndPassword(auth, cleanEmail, altPwd);
+              matched = true;
+              break;
+            } catch (e) {
+              // continue
+            }
+          }
+          if (!matched) throw firstErr;
+        } else {
+          throw firstErr;
+        }
+      }
       const user = userCredential.user;
 
       // 1. Check user profile in Firestore: users/{uid}

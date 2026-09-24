@@ -118,6 +118,41 @@ export const formatMonthYear = (month, year, lang) => {
   return `${mName} ${y}`;
 };
 
+/**
+ * Safely extract Month and Year (1-indexed month, e.g. 7 for July, 2026) from a date string, Date object, or timestamp.
+ * Avoids UTC timezone day shifts by parsing ISO date strings (e.g. '2026-07-15') directly.
+ */
+export const getLoanMonthYear = (dateValue) => {
+  if (!dateValue) return { month: 0, year: 0 };
+  if (typeof dateValue === 'string') {
+    const trimmed = dateValue.trim();
+    if (trimmed.includes('-')) {
+      const parts = trimmed.split('T')[0].split('-');
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (!isNaN(y) && !isNaN(m)) {
+          return { year: y, month: m };
+        }
+      }
+    }
+  }
+  let d;
+  if (dateValue && typeof dateValue.toDate === 'function') {
+    d = dateValue.toDate();
+  } else if (dateValue && typeof dateValue.seconds === 'number') {
+    d = new Date(dateValue.seconds * 1000);
+  } else if (dateValue instanceof Date) {
+    d = dateValue;
+  } else {
+    d = new Date(dateValue);
+  }
+  if (!isNaN(d.getTime())) {
+    return { month: d.getMonth() + 1, year: d.getFullYear() };
+  }
+  return { month: 0, year: 0 };
+};
+
 export const getOrdinalSuffix = (day) => {
   const d = parseInt(day, 10) || 10;
   if (d >= 11 && d <= 13) return `${d}th`;

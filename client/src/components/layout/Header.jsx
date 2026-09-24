@@ -14,9 +14,10 @@ import {
   User,
   Settings,
   LogOut,
+  SlidersHorizontal,
 } from 'lucide-react';
 
-const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan, onOpenRecordRepayment }) => {
+const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan, onOpenRecordRepayment, onOpenAdjustment }) => {
   const { user, groupName, logout, roleName, canManageSavings, canManageLoans, canManageGroup } = useAuth();
   const { t, getGroupName } = useLanguage();
   const [isGroupModalOpen, setIsGroupModalOpen] = useState(false);
@@ -144,6 +145,15 @@ const Header = ({ onOpenMobileSidebar, onOpenRecordSavings, onOpenCreateLoan, on
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
           {/* Quick Actions */}
           <div className="header-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {(canManageSavings || canManageLoans) && onOpenAdjustment && (
+              <button
+                onClick={onOpenAdjustment}
+                className="btn-outline"
+                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+              >
+                <SlidersHorizontal size={15} /> {t('header.adjustment', 'Adjustment')}
+              </button>
+            )}
             {(canManageSavings || canManageLoans) && onOpenRecordSavings && (
               <button
                 onClick={onOpenRecordSavings}

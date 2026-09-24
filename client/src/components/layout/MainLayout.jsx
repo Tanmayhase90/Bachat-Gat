@@ -5,6 +5,7 @@ import Header from './Header';
 import AddMemberModal from '../forms/AddMemberModal';
 import RecordSavingsAndLoanModal from '../forms/RecordSavingsAndLoanModal';
 import CreateLoanModal from '../forms/CreateLoanModal';
+import AdjustmentModal from '../forms/AdjustmentModal';
 import { licenseService } from '../../services/licenseService';
 import { backupService } from '../../services/backupService';
 import {
@@ -19,6 +20,7 @@ const MainLayout = () => {
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [recordModalOptions, setRecordModalOptions] = useState({});
   const [isCreateLoanOpen, setIsCreateLoanOpen] = useState(false);
+  const [isAdjustmentOpen, setIsAdjustmentOpen] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Licence & Auto Backup state
@@ -76,6 +78,7 @@ const MainLayout = () => {
         <Header
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
           onOpenAddMember={() => setIsAddMemberOpen(true)}
+          onOpenAdjustment={() => setIsAdjustmentOpen(true)}
           onOpenRecordSavings={() => handleOpenRecordModal({ mode: 'savings' })}
           onOpenCreateLoan={() => setIsCreateLoanOpen(true)}
           onOpenRecordRepayment={() => handleOpenRecordModal({ mode: 'loan' })}
@@ -87,6 +90,7 @@ const MainLayout = () => {
               refreshTrigger,
               triggerRefresh,
               openAddMember: () => setIsAddMemberOpen(true),
+              openAdjustment: () => setIsAdjustmentOpen(true),
               openRecordSavings: handleOpenRecordModal,
               openCreateLoan: () => setIsCreateLoanOpen(true),
               openRecordRepayment: (options = {}) => handleOpenRecordModal({ ...options, mode: 'loan' }),
@@ -96,6 +100,12 @@ const MainLayout = () => {
       </div>
 
       {/* Global Modals */}
+      <AdjustmentModal
+        isOpen={isAdjustmentOpen}
+        onClose={() => setIsAdjustmentOpen(false)}
+        onSuccess={triggerRefresh}
+      />
+
       <AddMemberModal
         isOpen={isAddMemberOpen}
         onClose={() => setIsAddMemberOpen(false)}

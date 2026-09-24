@@ -113,7 +113,7 @@ export const licenseService = {
       }
 
       const cleanKey = key.trim();
-      const response = await api.post('/license/activate', {
+      const response = await api.post('/license', {
         machineId,
         key: cleanKey,
       });

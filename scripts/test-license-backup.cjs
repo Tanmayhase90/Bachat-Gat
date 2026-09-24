@@ -5,6 +5,8 @@
 
 const assert = require('assert');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 // Set test secret
 const TEST_SECRET = 'Test_License_Signing_Secret_2026_!@#$';
@@ -82,6 +84,17 @@ runTest('Expired licence key is strictly rejected', () => {
 runTest('Malformed or non-base64 key is rejected gracefully without crashing', () => {
   const result = verifyKey(testMachineId, 'not-a-valid-key!@#$%^&*()');
   assert.strictEqual(result.valid, false);
+});
+
+runTest('Frontend activation targets the existing licence API route', () => {
+  const serviceSource = fs.readFileSync(
+    path.join(__dirname, '../client/src/services/licenseService.js'),
+    'utf8'
+  );
+  assert(serviceSource.includes("api.post('/license',"));
+  assert(!serviceSource.includes('https://bachat-gat-web.vercel.app/api/license'));
+  assert(!serviceSource.includes('LICENSE_ACTIVATION_ENDPOINT'));
+  assert(!serviceSource.includes("api.post('/license/activate',"));
 });
 
 // ----------------------------------------------------------------------------

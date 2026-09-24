@@ -5,7 +5,8 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "nodemon src/index.js"
+    "dev": "nodemon src/index.js",
+    "license:generate": "node scripts/generateLicenseKey.js"
   },
   "keywords": ["bachat-gat", "microfinance", "savings-group", "express", "firebase"],
   "author": "Internship Project",

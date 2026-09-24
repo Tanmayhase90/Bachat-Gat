@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env.local') });
 require('dotenv').config({ path: path.join(__dirname, '../.env') });
 
 const authRoutes = require('./routes/authRoutes');

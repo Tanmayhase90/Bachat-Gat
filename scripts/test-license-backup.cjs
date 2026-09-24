@@ -40,7 +40,9 @@ console.log('======================================================\n');
 console.log('--- 1. Licence Algorithm & Key Verification ---');
 
 const testMachineId = 'A1B2C3D4E5F6G7H8';
-const futureDate = '2027-09-17';
+const futureExpiry = new Date();
+futureExpiry.setUTCFullYear(futureExpiry.getUTCFullYear() + 1);
+const futureDate = futureExpiry.toISOString().slice(0, 10);
 const validKey = generateKey(testMachineId, futureDate);
 
 runTest('Admin key generator creates valid base64url token', () => {
@@ -86,12 +88,17 @@ runTest('Malformed or non-base64 key is rejected gracefully without crashing', (
   assert.strictEqual(result.valid, false);
 });
 
-runTest('Frontend activation targets the existing licence API route', () => {
+runTest('Frontend and backend use the same licence activation route', () => {
   const serviceSource = fs.readFileSync(
     path.join(__dirname, '../client/src/services/licenseService.js'),
     'utf8'
   );
+  const routesSource = fs.readFileSync(
+    path.join(__dirname, '../server/src/routes/licenseRoutes.js'),
+    'utf8'
+  );
   assert(serviceSource.includes("api.post('/license',"));
+  assert(routesSource.includes("router.post('/', licenseController.activate);"));
   assert(!serviceSource.includes('https://bachat-gat-web.vercel.app/api/license'));
   assert(!serviceSource.includes('LICENSE_ACTIVATION_ENDPOINT'));
   assert(!serviceSource.includes("api.post('/license/activate',"));

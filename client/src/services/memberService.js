@@ -261,7 +261,12 @@ export const memberService = {
         groupDocSnap?.data()?.monthlyContributionAmount ??
         1000
       );
-      const allContributions = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const sortedContribDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+      const allContributions = sortedContribDocs.map((d) => normalizeSavings(d.id, d.data()));
       const allLoans = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
 
       const regularMemberDocs = membersSnap.docs.filter((docSnap) => isRegularMember({ id: docSnap.id, ...docSnap.data() }));
@@ -270,11 +275,29 @@ export const memberService = {
         const raw = docSnap.data();
         const memberId = docSnap.id;
         const normalized = normalizeMember(memberId, raw);
+        const memberCode = normalized.memberCode || raw.member_code || '';
+        const cleanId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+        const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
 
-        // Calculate member savings total
-        const memberSavingsTotal = allContributions
-          .filter((s) => s.memberId === memberId || s.member_id === memberId)
-          .reduce((acc, s) => acc + (s.paidAmount || 0), 0);
+        // Calculate member savings total with deduplication (1 base + 1 monthly per period)
+        const seenKeys = new Set();
+        let memberSavingsTotal = 0;
+        allContributions.forEach((s) => {
+          const sMId = String(s.memberId || s.member_id || '');
+          const sMCode = String(s.memberCode || s.member_code || '');
+          const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+          const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+          const isThisMember = sMId === memberId || sMCode === memberCode || sCleanId === cleanId || sCleanCode === cleanCode;
+          if (!isThisMember) return;
+
+          const dedupKey = s.isBase ? 'base' : `${s.year}_${s.month}`;
+          if (seenKeys.has(dedupKey)) return;
+          seenKeys.add(dedupKey);
+
+          if (s.isPaid || s.paidAmount > 0) {
+            memberSavingsTotal += (s.paidAmount || s.amount || 0);
+          }
+        });
 
         // Calculate active loan outstanding
         const memberActiveLoans = allLoans.filter(
@@ -441,10 +464,35 @@ export const memberService = {
       const memberShares = Number(normalized.shares || normalized.shareCount || 1);
       const calculatedMonthlyContribution = memberShares * groupContributionPerShare;
 
-      const memberSavings = contributionsSnap.docs
-        .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((s) => s.memberId === actualMemberId || s.member_id === actualMemberId)
-        .sort((a, b) => b.year - a.year || b.month - a.month);
+      const sortedContribDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+
+      const memberCode = normalized.memberCode || rawData.member_code || '';
+      const cleanId = String(actualMemberId).toLowerCase().replace(/[-_]/g, '');
+      const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
+
+      const seenKeys = new Set();
+      const memberSavings = [];
+      sortedContribDocs.forEach((d) => {
+        const s = normalizeSavings(d.id, d.data());
+        const sMId = String(s.memberId || s.member_id || '');
+        const sMCode = String(s.memberCode || s.member_code || '');
+        const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+        const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+        const isThisMember = sMId === actualMemberId || sMCode === memberCode || sCleanId === cleanId || sCleanCode === cleanCode;
+        if (!isThisMember) return;
+
+        const dedupKey = s.isBase ? 'base' : `${s.year}_${s.month}`;
+        if (seenKeys.has(dedupKey)) return;
+        seenKeys.add(dedupKey);
+
+        memberSavings.push(s);
+      });
+
+      memberSavings.sort((a, b) => b.year - a.year || b.month - a.month);
 
       const repaymentsList = repaymentsSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))

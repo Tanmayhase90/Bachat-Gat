@@ -113,15 +113,31 @@ export const dashboardService = {
         if (cleanId) validMemberIdSet.add(cleanId);
       });
 
-      const contributionsList = contributionsSnap.docs
-        .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((c) => {
-          const mId = String(c.memberId || c.member_id || '');
-          const mCode = String(c.memberCode || c.member_code || '');
-          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
-          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
-          return validMemberIdSet.has(mId) || validMemberIdSet.has(mCode) || validMemberIdSet.has(cleanId) || validMemberIdSet.has(cleanCode);
-        });
+      const sortedContribDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+
+      const seenContribs = new Set();
+      const contributionsList = [];
+
+      sortedContribDocs.forEach((d) => {
+        const c = normalizeSavings(d.id, d.data());
+        const mId = String(c.memberId || c.member_id || '');
+        const mCode = String(c.memberCode || c.member_code || '');
+        const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+        const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+        const isMatch = validMemberIdSet.has(mId) || validMemberIdSet.has(mCode) || validMemberIdSet.has(cleanId) || validMemberIdSet.has(cleanCode);
+        if (!isMatch) return;
+
+        const canonicalMemberKey = cleanId || mId;
+        const dedupKey = c.isBase ? `${canonicalMemberKey}_base` : `${canonicalMemberKey}_${c.year}_${c.month}`;
+        if (seenContribs.has(dedupKey)) return;
+        seenContribs.add(dedupKey);
+
+        contributionsList.push(c);
+      });
 
       const liveSavingsTotal = contributionsList
         .filter((c) => c.isPaid || c.paidAmount > 0)
@@ -212,10 +228,12 @@ export const dashboardService = {
       // 6. Member Personal Summary (if memberId provided)
       let memberSummary = null;
       if (memberId) {
-        const contributionsList = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
-        const myContributions = contributionsList.filter(
-          (c) => c.memberId === memberId || c.member_id === memberId
-        );
+        const cleanTargetId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+        const myContributions = contributionsList.filter((c) => {
+          const cMId = String(c.memberId || c.member_id || '');
+          const cCleanId = cMId.toLowerCase().replace(/[-_]/g, '');
+          return cMId === memberId || cCleanId === cleanTargetId;
+        });
         const mySavings = myContributions.reduce((acc, c) => acc + (c.paidAmount || c.amount || 0), 0);
         const myInterestPaid = myContributions.reduce((acc, c) => acc + (c.interestAmount || c.interest || 0), 0);
 

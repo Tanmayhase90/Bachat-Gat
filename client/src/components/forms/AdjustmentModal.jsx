@@ -159,6 +159,21 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
           const res = await adjustmentService.getMemberHistoricalData(selectedMemberId);
           if (res.success) {
             setMemberHistorical(res);
+            // Synchronize initialForm with member's existing initial entry if present
+            if (res.initialEntry) {
+              setInitialForm((prev) => ({
+                ...prev,
+                amount: String(res.initialEntry.paidAmount !== undefined ? res.initialEntry.paidAmount : (res.initialAmount || '10000')),
+                payment_date: res.initialEntry.paymentDate || res.initialEntry.payment_date || prev.payment_date,
+                payment_mode: res.initialEntry.paymentMode || res.initialEntry.payment_mode || 'Opening Balance',
+                remarks: res.initialEntry.remarks || res.initialEntry.notes || 'Initial group opening amount',
+              }));
+            } else if (res.initialAmount > 0) {
+              setInitialForm((prev) => ({
+                ...prev,
+                amount: String(res.initialAmount),
+              }));
+            }
             // If member has active loans and repayment tab is open, pre-select first loan
             if (res.loans && res.loans.length > 0) {
               const activeLoan = res.loans.find((l) => (l.status || '').toUpperCase() === 'ACTIVE') || res.loans[0];
@@ -194,6 +209,15 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
       const res = await adjustmentService.getMemberHistoricalData(selectedMemberId);
       if (res.success) {
         setMemberHistorical(res);
+        if (res.initialEntry) {
+          setInitialForm((prev) => ({
+            ...prev,
+            amount: String(res.initialEntry.paidAmount !== undefined ? res.initialEntry.paidAmount : (res.initialAmount || '10000')),
+            payment_date: res.initialEntry.paymentDate || res.initialEntry.payment_date || prev.payment_date,
+            payment_mode: res.initialEntry.paymentMode || res.initialEntry.payment_mode || 'Opening Balance',
+            remarks: res.initialEntry.remarks || res.initialEntry.notes || 'Initial group opening amount',
+          }));
+        }
       }
       // Also refresh active members list
       const mRes = await adjustmentService.getActiveMembers();
@@ -216,6 +240,39 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     const id = (m.id || '').toLowerCase();
     return name.includes(query) || code.includes(query) || id.includes(query);
   });
+
+  // Determine current savings form month/year and detect existing saving for same month/year
+  const formSavingsMonth = parseInt(savingsForm.month, 10);
+  const formSavingsYear = parseInt(savingsForm.year, 10);
+
+  const existingMonthSaving = (memberHistorical?.savings || []).find((s) => {
+    return Number(s.month) === formSavingsMonth && Number(s.year) === formSavingsYear;
+  });
+
+  // Auto-populate savings form when existing saving is detected for selected member & month/year
+  const lastLoadedSavingsKeyRef = useRef('');
+
+  useEffect(() => {
+    if (!isOpen) {
+      lastLoadedSavingsKeyRef.current = '';
+      return;
+    }
+    if (selectedMemberId && formSavingsMonth && formSavingsYear) {
+      const savingsKey = `${selectedMemberId}_${formSavingsYear}_${formSavingsMonth}`;
+      if (lastLoadedSavingsKeyRef.current !== savingsKey) {
+        lastLoadedSavingsKeyRef.current = savingsKey;
+        if (existingMonthSaving) {
+          setSavingsForm((prev) => ({
+            ...prev,
+            amount: String(existingMonthSaving.paidAmount !== undefined ? existingMonthSaving.paidAmount : (existingMonthSaving.amount || '1000')),
+            payment_date: existingMonthSaving.paymentDate || existingMonthSaving.payment_date || prev.payment_date,
+            payment_mode: (existingMonthSaving.paymentMode && existingMonthSaving.paymentMode !== 'Opening Balance') ? existingMonthSaving.paymentMode : (existingMonthSaving.payment_mode || prev.payment_mode),
+            remarks: existingMonthSaving.remarks || existingMonthSaving.notes || prev.remarks,
+          }));
+        }
+      }
+    }
+  }, [isOpen, selectedMemberId, formSavingsMonth, formSavingsYear, existingMonthSaving]);
 
   // Determine current loan form month/year and detect existing loan for same month/year
   const { month: formLoanMonth, year: formLoanYear } = getLoanMonthYear(loanForm.loan_date);
@@ -309,7 +366,14 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     try {
       setSubmitting(true);
       setError('');
-      await adjustmentService.recordHistoricalSaving({
+      const savedAmount = parseFloat(savingsForm.amount) || 0;
+      const savedMonth = parseInt(savingsForm.month, 10);
+      const savedYear = parseInt(savingsForm.year, 10);
+      const savedDate = savingsForm.payment_date;
+      const savedMode = savingsForm.payment_mode;
+      const savedRemarks = savingsForm.remarks;
+
+      const res = await adjustmentService.recordHistoricalSaving({
         member_id: selectedMemberId,
         month: savingsForm.month,
         year: savingsForm.year,
@@ -318,7 +382,54 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
         payment_mode: savingsForm.payment_mode,
         remarks: savingsForm.remarks,
       });
-      showSuccessToast(t('adjustment.savingSuccess', 'Historical monthly saving saved successfully.'));
+
+      // Optimistically update memberHistorical in local state
+      setMemberHistorical((prev) => {
+        if (!prev) return prev;
+        const oldSavings = prev.savings || [];
+        const existingIdx = oldSavings.findIndex((s) => Number(s.month) === savedMonth && Number(s.year) === savedYear);
+        let updatedSavings;
+        if (existingIdx >= 0) {
+          updatedSavings = [...oldSavings];
+          updatedSavings[existingIdx] = {
+            ...updatedSavings[existingIdx],
+            paidAmount: savedAmount,
+            paid_amount: savedAmount,
+            amount: savedAmount,
+            paymentDate: savedDate,
+            payment_date: savedDate,
+            paymentMode: savedMode,
+            payment_mode: savedMode,
+            remarks: savedRemarks,
+          };
+        } else {
+          updatedSavings = [
+            {
+              id: res?.id || `C_${selectedMemberId}_${savedYear}_${String(savedMonth).padStart(2, '0')}`,
+              month: savedMonth,
+              year: savedYear,
+              paidAmount: savedAmount,
+              paid_amount: savedAmount,
+              amount: savedAmount,
+              paymentDate: savedDate,
+              payment_date: savedDate,
+              paymentMode: savedMode,
+              payment_mode: savedMode,
+              remarks: savedRemarks,
+            },
+            ...oldSavings,
+          ];
+        }
+        return {
+          ...prev,
+          savings: updatedSavings,
+        };
+      });
+
+      const successMsg = res.isUpdated
+        ? t('adjustment.savingUpdatedSuccess', 'Historical monthly saving updated successfully.')
+        : t('adjustment.savingSuccess', 'Historical monthly saving saved successfully.');
+      showSuccessToast(successMsg);
       await refreshMemberData();
     } catch (err) {
       setError(err.message || 'Failed to save historical saving');
@@ -763,6 +874,29 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
         {/* ============================================================ */}
         {activeTab === 'savings' && (
           <form onSubmit={handleSaveSavings} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {existingMonthSaving && (
+              <div
+                style={{
+                  background: '#EFF6FF',
+                  border: '1px solid #BFDBFE',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '8px 12px',
+                  fontSize: '0.8rem',
+                  color: '#1E40AF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <SlidersHorizontal size={14} />
+                <span>
+                  {t('adjustment.editingExistingSaving', {
+                    monthYear: formatMonthYear(formSavingsMonth, formSavingsYear, language),
+                  }) || `Editing existing saving for ${formatMonthYear(formSavingsMonth, formSavingsYear, language)}`}: <strong>{formatCurrency(existingMonthSaving.paidAmount)}</strong>
+                </span>
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
               <div className="form-group" style={{ margin: 0 }}>
                 <label className="form-label">{t('adjustment.savingMonthLabel', 'Historical Month')} *</label>
@@ -865,7 +999,12 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
               disabled={submitting || !selectedMemberId}
               style={{ marginTop: '6px', alignSelf: 'flex-start', padding: '10px 20px' }}
             >
-              <PiggyBank size={16} /> {submitting ? t('common.loading', 'Saving...') : t('adjustment.saveSavingsBtn', 'Save Historical Monthly Saving')}
+              <PiggyBank size={16} />{' '}
+              {submitting
+                ? t('common.loading', 'Saving...')
+                : existingMonthSaving
+                ? (t('adjustment.updateSavingsBtn', 'Update Historical Monthly Saving') || 'Update Historical Monthly Saving')
+                : t('adjustment.saveSavingsBtn', 'Save Historical Monthly Saving')}
             </button>
           </form>
         )}

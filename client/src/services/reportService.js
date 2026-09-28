@@ -147,15 +147,32 @@ export const reportService = {
       }, 0);
 
       // Centralized Group Balances dynamically aggregated from all contributions and repayments
-      const allSavings = contributionsSnap.docs
-        .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((c) => {
-          const mId = String(c.memberId || c.member_id || '');
-          const mCode = String(c.memberCode || c.member_code || '');
-          const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
-          const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
-          return activeMemberIdSet.has(mId) || activeMemberIdSet.has(mCode) || activeMemberIdSet.has(cleanId) || activeMemberIdSet.has(cleanCode);
-        });
+      const sortedContribDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+
+      const seenSavings = new Set();
+      const allSavings = [];
+
+      sortedContribDocs.forEach((d) => {
+        const c = normalizeSavings(d.id, d.data());
+        const mId = String(c.memberId || c.member_id || '');
+        const mCode = String(c.memberCode || c.member_code || '');
+        const cleanId = mId.toLowerCase().replace(/[-_]/g, '');
+        const cleanCode = mCode.toLowerCase().replace(/[-_]/g, '');
+        const isMatch = activeMemberIdSet.has(mId) || activeMemberIdSet.has(mCode) || activeMemberIdSet.has(cleanId) || activeMemberIdSet.has(cleanCode);
+        if (!isMatch) return;
+
+        const canonicalMemberKey = cleanId || mId;
+        const dedupKey = c.isBase ? `${canonicalMemberKey}_base` : `${canonicalMemberKey}_${c.year}_${c.month}`;
+        if (seenSavings.has(dedupKey)) return;
+        seenSavings.add(dedupKey);
+
+        allSavings.push(c);
+      });
+
       const grossSavings = allSavings.filter((c) => c.isPaid || c.paidAmount > 0).reduce((sum, c) => sum + (c.paidAmount || c.amount || 0), 0);
 
       const totalSettledSavings = settlementsSnap.docs.reduce((sum, d) => {

@@ -652,7 +652,10 @@ export const translations = {
       "loanExceedsZero": "Loan amount cannot exceed available balance of ₹0.",
       "updateLoanBtn": "Update Historical Loan",
       "loanUpdatedSuccess": "Historical loan updated successfully.",
-      "editingExistingLoan": "Editing existing {monthYear} loan"
+      "editingExistingLoan": "Editing existing {monthYear} loan",
+      "updateSavingsBtn": "Update Historical Monthly Saving",
+      "savingUpdatedSuccess": "Historical monthly saving updated successfully.",
+      "editingExistingSaving": "Editing existing {monthYear} saving"
     }
   },
   "mr": {
@@ -1303,7 +1306,10 @@ export const translations = {
       "loanExceedsZero": "कर्ज रक्कम उपलब्ध शिल्लक ₹० पेक्षा जास्त असू शकत नाही.",
       "updateLoanBtn": "जुने कर्ज अपडेट करा",
       "loanUpdatedSuccess": "जुने कर्ज यशस्वीरित्या अपडेट झाले.",
-      "editingExistingLoan": "विद्यमान {monthYear} चे कर्ज संपादित करत आहे"
+      "editingExistingLoan": "विद्यमान {monthYear} चे कर्ज संपादित करत आहे",
+      "updateSavingsBtn": "जुनी मासिक बचत अपडेट करा",
+      "savingUpdatedSuccess": "जुनी मासिक बचत यशस्वीरित्या अपडेट झाली.",
+      "editingExistingSaving": "विद्यमान {monthYear} ची बचत संपादित करत आहे"
     }
   }
 };

@@ -25,6 +25,7 @@ import {
   Clock,
   Save,
   MessageCircle,
+  Share2,
 } from 'lucide-react';
 
 const MemberDetails = () => {
@@ -90,6 +91,104 @@ const MemberDetails = () => {
 
   const handleDeleteMember = () => {
     setIsDeleteOpen(true);
+  };
+
+  const handleShareWhatsApp = () => {
+    if (!member) return;
+
+    // 1. Personal Details
+    const memberCode = member.member_code || member.memberCode || member.id || '-';
+    const memberName = member.name || member.fullName || '-';
+    const memberStatus = member.is_active !== undefined ? (member.is_active ? 'Active' : 'Inactive') : (member.status || 'Active');
+    const rawRole = (member.role_name || member.role || 'Member').toUpperCase();
+    const formattedRole = rawRole.charAt(0) + rawRole.slice(1).toLowerCase();
+    const rawJoinDate = member.joined_date || member.joinDate || member.joinedAt;
+    const joiningDate = rawJoinDate ? formatDate(rawJoinDate) : null;
+    const phone = member.phone || member.phoneNumber || member.mobileNumber || null;
+    const sharesCount = Number(member.shares || member.shareCount || 1);
+    const address = member.address || member.village || member.city || null;
+    const occupation = member.occupation || null;
+
+    // 2. Savings Details
+    const rawTotalSavings = Number(member.totalSavings || member.total_savings || 0);
+    const totalSavings = formatCurrency(rawTotalSavings);
+    const rawMonthlyShare = Number(member.monthlyContribution || member.monthly_contribution || 0);
+    const monthlyShare = formatCurrency(rawMonthlyShare);
+    const savingsHistory = member.savingsHistory || member.savings_history || [];
+    const savingsRecordsCount = savingsHistory.length;
+
+    // 3. Loan & Repayment Details
+    const allLoans = member.loans || member.loans_history || [];
+    const rawOutstanding = Number(member.totalOutstanding || member.total_outstanding || 0);
+    const currentOutstandingLoan = formatCurrency(rawOutstanding);
+    const totalLoansTaken = allLoans.length;
+    const totalLoansDisbursedAmount = allLoans.reduce((sum, l) => sum + Number(l.originalPrincipal || l.principalAmount || 0), 0);
+    const totalLoansDisbursed = formatCurrency(totalLoansDisbursedAmount);
+
+    const allRepayments = member.repayments || [];
+    const totalPrincipalRepaidAmount = allRepayments.reduce((sum, r) => sum + Number(r.principalAmount || r.principalPaid || r.principalRepaid || 0), 0);
+    const totalPrincipalRepaid = formatCurrency(totalPrincipalRepaidAmount);
+    const totalInterestPaidAmount = allRepayments.reduce((sum, r) => sum + Number(r.interestAmount || r.interestPaid || r.interest_amount || 0), 0);
+    const totalLoanInterestPaid = formatCurrency(totalInterestPaidAmount);
+    const totalRepaymentsCount = allRepayments.length;
+
+    // 4. Account Summary
+    const netPositionAmount = rawTotalSavings - rawOutstanding;
+    const netPosition = netPositionAmount < 0 ? `-₹${Math.abs(Math.round(netPositionAmount)).toLocaleString('en-IN')}` : formatCurrency(netPositionAmount);
+
+    const lines = [
+      '━━━━━━━━━━━━━━━━',
+      '🏦 *Bachat Gat*',
+      '*Member Details*',
+      '━━━━━━━━━━━━━━━━',
+      '',
+      '👤 *Personal Details*',
+      `Member ID: ${memberCode}`,
+      `Member Name: ${memberName}`,
+      `Status: ${memberStatus}`,
+      `Role: ${formattedRole}`,
+      ...(joiningDate ? [`Joining Date: ${joiningDate}`] : []),
+      ...(phone ? [`Mobile: ${phone}`] : []),
+      ...(sharesCount > 1 ? [`Shares: ${sharesCount}`] : []),
+      ...(address ? [`Address: ${address}`] : []),
+      ...(occupation ? [`Occupation: ${occupation}`] : []),
+      '',
+      '━━━━━━━━━━━━━━━━',
+      '',
+      '💰 *Savings Details*',
+      `Total Savings: ${totalSavings}`,
+      `Monthly Share: ${monthlyShare}`,
+      `Total Savings Records: ${savingsRecordsCount}`,
+      '',
+      '━━━━━━━━━━━━━━━━',
+      '',
+      '💳 *Loan & Repayment Details*',
+      `Current Outstanding Loan: ${currentOutstandingLoan}`,
+      `Total Loans Taken: ${totalLoansTaken}`,
+      ...(totalLoansTaken > 0
+        ? [
+            `Total Loan Amount Disbursed: ${totalLoansDisbursed}`,
+            `Total Principal Repaid: ${totalPrincipalRepaid}`,
+            `Total Loan Interest Paid: ${totalLoanInterestPaid}`,
+            `Total Repayments: ${totalRepaymentsCount}`,
+          ]
+        : [`Total Repayments: ${totalRepaymentsCount}`]),
+      '',
+      '━━━━━━━━━━━━━━━━',
+      '',
+      '📊 *Account Summary*',
+      `Total Savings: ${totalSavings}`,
+      `Current Loan Outstanding: ${currentOutstandingLoan}`,
+      `Net Position: ${netPosition}`,
+      '',
+      '━━━━━━━━━━━━━━━━',
+      '_This information is shared from Bachat Gat Digital Savings Group System._',
+      '━━━━━━━━━━━━━━━━',
+    ];
+
+    const message = lines.join('\n');
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
   };
 
   const getRoleBadge = (role) => {
@@ -279,6 +378,15 @@ const MemberDetails = () => {
               <Trash2 size={16} /> {t('memberDetails.deleteMemberBtn', 'Delete Member Account')}
             </button>
           )}
+          <button
+            onClick={handleShareWhatsApp}
+            className="btn-outline"
+            title={t('common.share', 'Share via WhatsApp')}
+            aria-label={t('common.share', 'Share via WhatsApp')}
+            style={{ padding: '8px 12px' }}
+          >
+            <Share2 size={16} />
+          </button>
         </div>
       </div>
 

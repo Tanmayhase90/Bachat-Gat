@@ -83,8 +83,8 @@ export const savingsService = {
           return;
         }
 
-        // Deduplicate payments by (memberId, year, month)
-        const dedupKey = `${member.id}_${normalized.year}_${normalized.month}`;
+        // Deduplicate payments by (memberId, year, month) or base
+        const dedupKey = normalized.isBase ? `${member.id}_base` : `${member.id}_${normalized.year}_${normalized.month}`;
         if (seenMemberPeriod.has(dedupKey)) {
           return;
         }

@@ -5,11 +5,13 @@ import {
   getDoc,
   setDoc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../config/firebase.js';
+import { groupService } from './groupService.js';
 import { savingsService } from './savingsService.js';
 import { loanService } from './loanService.js';
 import {
@@ -36,7 +38,12 @@ export const adjustmentService = {
         getDocs(collection(db, 'groups', targetGroupId, 'loans')).catch(() => ({ docs: [] })),
       ]);
 
-      const allContributions = contributionsSnap.docs.map((d) => normalizeSavings(d.id, d.data()));
+      const sortedContribDocs = [...contributionsSnap.docs].sort((a, b) => {
+        const aDate = a.data().updatedAt || a.data().createdAt || '';
+        const bDate = b.data().updatedAt || b.data().createdAt || '';
+        return bDate.localeCompare(aDate);
+      });
+      const allContributions = sortedContribDocs.map((d) => normalizeSavings(d.id, d.data()));
       const allLoans = loansSnap.docs.map((d) => normalizeLoan(d.id, d.data()));
 
       const regularMemberDocs = membersSnap.docs.filter((docSnap) =>
@@ -47,10 +54,29 @@ export const adjustmentService = {
         const raw = docSnap.data();
         const memberId = docSnap.id;
         const normalized = normalizeMember(memberId, raw);
+        const memberCode = normalized.memberCode || raw.member_code || '';
+        const cleanId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+        const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
 
-        const memberSavingsTotal = allContributions
-          .filter((s) => s.memberId === memberId || s.member_id === memberId)
-          .reduce((acc, s) => acc + (s.paidAmount || 0), 0);
+        // Deduplicate contributions for this member (1 base + 1 monthly per month/year)
+        const seenKeys = new Set();
+        let memberSavingsTotal = 0;
+        allContributions.forEach((s) => {
+          const sMId = String(s.memberId || s.member_id || '');
+          const sMCode = String(s.memberCode || s.member_code || '');
+          const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+          const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+          const isThisMember = sMId === memberId || sMCode === memberCode || sCleanId === cleanId || sCleanCode === cleanCode;
+          if (!isThisMember) return;
+
+          const dedupKey = s.isBase ? 'base' : `${s.year}_${s.month}`;
+          if (seenKeys.has(dedupKey)) return;
+          seenKeys.add(dedupKey);
+
+          if (s.isPaid || s.paidAmount > 0) {
+            memberSavingsTotal += (s.paidAmount || s.amount || 0);
+          }
+        });
 
         const memberActiveLoans = allLoans.filter(
           (l) => (l.memberId === memberId || l.member_id === memberId) && (l.status || '').toUpperCase() === 'ACTIVE'
@@ -99,17 +125,77 @@ export const adjustmentService = {
       ]);
 
       const memberData = memberSnap?.exists() ? normalizeMember(memberId, memberSnap.data()) : null;
+      const memberCode = memberData?.memberCode || memberData?.member_code || '';
+      const cleanId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+      const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
 
-      const memberContributions = contribsSnap.docs
-        .map((d) => normalizeSavings(d.id, d.data()))
-        .filter((s) => s.memberId === memberId || s.member_id === memberId)
-        .sort((a, b) => b.year - a.year || b.month - a.month);
+      const getDocTimestamp = (d) => {
+        const raw = d.data() || {};
+        const v = raw.updatedAt || raw.updated_at || raw.createdAt || raw.created_at;
+        if (!v) return 0;
+        if (typeof v.toMillis === 'function') return v.toMillis();
+        if (typeof v.toDate === 'function') return v.toDate().getTime();
+        if (typeof v.seconds === 'number') return v.seconds * 1000;
+        const ms = new Date(v).getTime();
+        return isNaN(ms) ? 0 : ms;
+      };
 
-      const initialEntry = memberContributions.find((s) => s.isBase || s.month === 0);
+      // Sort contributions by timestamp descending so latest update strictly takes precedence
+      const sortedContribDocs = [...contribsSnap.docs].sort((a, b) => {
+        return getDocTimestamp(b) - getDocTimestamp(a);
+      });
+
+      const candidateMemberIds = new Set([
+        String(memberId),
+        String(memberCode),
+        cleanId,
+        cleanCode,
+      ]);
+
+      const memberContribList = [];
+      sortedContribDocs.forEach((d) => {
+        const s = normalizeSavings(d.id, d.data());
+        const sMId = String(s.memberId || s.member_id || '');
+        const sMCode = String(s.memberCode || s.member_code || '');
+        const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+        const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+        if (candidateMemberIds.has(sMId) || candidateMemberIds.has(sMCode) || candidateMemberIds.has(sCleanId) || candidateMemberIds.has(sCleanCode)) {
+          memberContribList.push(s);
+        }
+      });
+
+      // Find the single canonical base/opening entry
+      const initialEntry = memberContribList.find((s) => s.isBase || s.month === 0) || null;
+      const initialAmount = initialEntry ? (initialEntry.paidAmount || initialEntry.amount || 0) : 0;
+
+      // Filter and deduplicate monthly regular savings (month > 0, not base)
+      const seenMonthKeys = new Set();
+      const regularSavings = [];
+      memberContribList.forEach((s) => {
+        if (s.isBase || s.month === 0) return;
+        const key = `${s.year}_${s.month}`;
+        if (seenMonthKeys.has(key)) return;
+        seenMonthKeys.add(key);
+
+        const paidAmount = s.paidAmount !== undefined ? s.paidAmount : (s.amount || 0);
+
+        regularSavings.push({
+          ...s,
+          paidAmount,
+          paid_amount: paidAmount,
+          amount: paidAmount,
+        });
+      });
+
+      regularSavings.sort((a, b) => b.year - a.year || b.month - a.month);
 
       const repaymentsList = repaysSnap.docs
         .map((d) => ({ id: d.id, ...d.data() }))
-        .filter((r) => r.memberId === memberId || r.member_id === memberId);
+        .filter((r) => {
+          const rMId = String(r.memberId || r.member_id || '');
+          const rCleanId = rMId.toLowerCase().replace(/[-_]/g, '');
+          return rMId === memberId || rCleanId === cleanId;
+        });
 
       const repaymentsByLoan = {};
       repaymentsList.forEach((r) => {
@@ -125,19 +211,25 @@ export const adjustmentService = {
           const lRepays = repaymentsByLoan[d.id] || repaymentsByLoan[d.data().loanId] || [];
           return normalizeLoan(d.id, d.data(), lRepays);
         })
-        .filter((l) => l.memberId === memberId || l.member_id === memberId);
+        .filter((l) => {
+          const lMId = String(l.memberId || l.member_id || '');
+          const lCleanId = lMId.toLowerCase().replace(/[-_]/g, '');
+          return lMId === memberId || lCleanId === cleanId;
+        });
 
-      const totalSavings = memberContributions.reduce((acc, s) => acc + (s.paidAmount || 0), 0);
+      const totalMonthlySavings = regularSavings.reduce((acc, s) => acc + (s.paidAmount || s.amount || 0), 0);
+      const totalSavings = initialAmount + totalMonthlySavings;
+
       const totalOutstanding = memberLoans
         .filter((l) => (l.status || '').toUpperCase() === 'ACTIVE')
-        .reduce((acc, l) => acc + (l.pendingPrincipal || 0), 0);
+        .reduce((acc, l) => acc + (l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0)), 0);
 
       return {
         success: true,
         member: memberData,
-        initialEntry: initialEntry || null,
-        initialAmount: initialEntry ? initialEntry.paidAmount : 0,
-        savings: memberContributions.filter((s) => !s.isBase && s.month > 0),
+        initialEntry,
+        initialAmount,
+        savings: regularSavings,
         loans: memberLoans,
         repayments: repaymentsList,
         totalSavings,
@@ -151,6 +243,7 @@ export const adjustmentService = {
 
   /**
    * 1. Record Initial One-Time Starting Amount (Base / Opening Savings, Month 0)
+   * Performs an exact UPDATE/replacement of the member's existing initial opening balance.
    */
   recordInitialAmount: async (data, groupId = DEFAULT_GROUP_ID) => {
     try {
@@ -178,9 +271,35 @@ export const adjustmentService = {
       const memData = memSnap.data();
       const memberName = memData.name || memData.fullName || 'Member';
       const memberCode = memData.memberCode || memData.member_code || memberId;
+      const cleanId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+      const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
 
       const dateObj = new Date(paymentDate);
       const year = !isNaN(dateObj.getFullYear()) ? dateObj.getFullYear() : (parseInt(data.year, 10) || 2026);
+
+      // Check all existing contributions to locate existing base / opening contribution doc(s) for this member
+      const contribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] }));
+
+      const existingBaseDocs = contribsSnap.docs.filter((d) => {
+        const dData = d.data() || {};
+        const dMId = String(dData.memberId || dData.member_id || '');
+        const dMCode = String(dData.memberCode || dData.member_code || '');
+        const dCleanId = dMId.toLowerCase().replace(/[-_]/g, '');
+        const dCleanCode = dMCode.toLowerCase().replace(/[-_]/g, '');
+
+        const isMatch = dMId === memberId || dMCode === memberCode || dCleanId === cleanId || dCleanCode === cleanCode || d.id.includes(memberId) || d.id.includes(memberCode);
+        if (!isMatch) return false;
+
+        const m = dData.month !== undefined ? parseInt(dData.month, 10) : null;
+        return (
+          dData.isBase === true ||
+          dData.type === 'BASE_SAVINGS' ||
+          m === 0 ||
+          d.id.includes('_base') ||
+          dData.paymentMode === 'Opening Balance' ||
+          dData.payment_mode === 'Opening Balance'
+        );
+      });
 
       const docId = `C_${memberId}_base`;
       const docRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', docId);
@@ -223,11 +342,26 @@ export const adjustmentService = {
         payment_mode: mode,
         notes,
         remarks: notes,
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
 
+      const canonicalSnap = contribsSnap.docs.find((d) => d.id === docId);
+      if (!canonicalSnap) {
+        contributionPayload.createdAt = new Date().toISOString();
+      }
+
       await setDoc(docRef, contributionPayload, { merge: true });
+
+      // Clean up any duplicate/alternate base records for this member so only canonical docId remains
+      for (const d of existingBaseDocs) {
+        if (d.id !== docId) {
+          try {
+            await deleteDoc(doc(db, 'groups', targetGroupId, 'monthly_contributions', d.id));
+          } catch (delErr) {
+            console.warn('Notice: cleanup duplicate base doc error:', delErr);
+          }
+        }
+      }
 
       // Log activity in activities
       const actId = `ACT_${Date.now()}_initial`;
@@ -235,7 +369,7 @@ export const adjustmentService = {
         id: actId,
         type: 'adjustment',
         amount,
-        description: `Initial one-time opening amount ₹${amount.toLocaleString('en-IN')} recorded for ${memberName}`,
+        description: `Initial one-time opening amount ₹${amount.toLocaleString('en-IN')} updated for ${memberName}`,
         memberId,
         memberName,
         referenceId: docId,
@@ -247,11 +381,34 @@ export const adjustmentService = {
 
       // Recalculate member total savings from contributions
       try {
-        const contribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions'));
-        const newTotalSavings = contribsSnap.docs
-          .map((d) => normalizeSavings(d.id, d.data()))
-          .filter((s) => s.memberId === memberId || s.member_id === memberId)
-          .reduce((sum, s) => sum + (s.paidAmount || 0), 0);
+        const refreshedContribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions'));
+        const seenMemberMonths = new Set();
+        let memberMonthlySavingsTotal = 0;
+
+        refreshedContribsSnap.docs.forEach((d) => {
+          const norm = normalizeSavings(d.id, d.data());
+          const sMId = String(norm.memberId || norm.member_id || '');
+          const sMCode = String(norm.memberCode || norm.member_code || '');
+          const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+          const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+
+          const isMatch = sMId === memberId || sMCode === memberCode || sCleanId === cleanId || sCleanCode === cleanCode;
+          if (!isMatch) return;
+
+          if (norm.isBase || norm.month === 0) return;
+
+          const dedupKey = `${norm.year}_${norm.month}`;
+          if (seenMemberMonths.has(dedupKey)) return;
+          seenMemberMonths.add(dedupKey);
+
+          const pureAmt = norm.paidAmount !== undefined ? norm.paidAmount : (norm.amount || 0);
+
+          if (norm.isPaid || pureAmt > 0) {
+            memberMonthlySavingsTotal += pureAmt;
+          }
+        });
+
+        const newTotalSavings = amount + memberMonthlySavingsTotal;
 
         await updateDoc(memRef, {
           totalSavings: newTotalSavings,
@@ -262,31 +419,12 @@ export const adjustmentService = {
         console.warn('Notice: Member total savings update on initial amount:', e);
       }
 
-      // Update Group summary metrics
-      try {
-        const groupRef = doc(db, 'groups', targetGroupId);
-        const groupSnap = await getDoc(groupRef);
-        if (groupSnap.exists()) {
-          const gData = groupSnap.data();
-          const currentSavings = Number(gData.totalSavings || gData.total_savings || 0);
-          const currentFund = Number(gData.totalFund || gData.total_fund || 0);
-          await updateDoc(groupRef, {
-            totalSavings: currentSavings + amount,
-            total_savings: currentSavings + amount,
-            totalFund: currentFund + amount,
-            total_fund: currentFund + amount,
-            availableBalance: currentFund + amount,
-            available_balance: currentFund + amount,
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      } catch (e) {
-        console.warn('Notice: Group summary update on initial amount:', e);
-      }
+      // Authoritative synchronization of group summary metrics from all collections
+      await groupService.recalculateAndSyncGroupAggregates(targetGroupId);
 
       return {
         success: true,
-        message: 'Initial group starting amount recorded successfully',
+        message: 'Initial group starting amount updated successfully',
         id: docId,
       };
     } catch (err) {
@@ -296,7 +434,9 @@ export const adjustmentService = {
   },
 
   /**
-   * 2. Record Historical Monthly Saving (Uses savingsService logic + duplicate protection)
+   * 2. Record Historical Monthly Saving (Unique Per Member + Month + Year)
+   * If an existing historical saving exists for the member in the same month/year, updates that record.
+   * Otherwise, creates a new historical saving record.
    */
   recordHistoricalSaving: async (data, groupId = DEFAULT_GROUP_ID) => {
     try {
@@ -306,7 +446,7 @@ export const adjustmentService = {
       const year = parseInt(data.year, 10);
       const rawAmount = data.amount;
       const amount = typeof rawAmount === 'number' ? rawAmount : parseFloat(String(rawAmount || '').replace(/,/g, ''));
-      const paymentDate = data.payment_date || data.paymentDate;
+      const paymentDate = data.payment_date || data.paymentDate || `${year}-${String(month).padStart(2, '0')}-10`;
       const mode = data.payment_mode || data.paymentMode || 'Cash';
       const notes = (data.remarks || data.notes || '').trim();
 
@@ -326,16 +466,173 @@ export const adjustmentService = {
         throw new Error('Please select the actual historical payment date.');
       }
 
-      // Delegate to standard savingsService for exact data consistency and duplicate checking
-      return await savingsService.recordSavings({
+      // Fetch member info
+      const memRef = doc(db, 'groups', targetGroupId, 'members', memberId);
+      const memSnap = await getDoc(memRef);
+      if (!memSnap.exists()) {
+        throw new Error('Selected member profile not found.');
+      }
+      const memData = memSnap.data();
+      const memberName = memData.name || memData.fullName || 'Member';
+      const memberCode = memData.memberCode || memData.member_code || memberId;
+      const cleanId = String(memberId).toLowerCase().replace(/[-_]/g, '');
+      const cleanCode = String(memberCode).toLowerCase().replace(/[-_]/g, '');
+
+      const candidateMemberIds = new Set([
+        String(memberId),
+        String(memberCode),
+        cleanId,
+        cleanCode,
+      ]);
+
+      // Identify existing monthly contribution record(s) for this member + month + year
+      const existingContribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions')).catch(() => ({ docs: [] }));
+      
+      const existingMonthlyDocs = existingContribsSnap.docs.filter((d) => {
+        const dData = d.data();
+        const dMId = String(dData.memberId || dData.member_id || '');
+        const dMCode = String(dData.memberCode || dData.member_code || '');
+        const dCleanId = dMId.toLowerCase().replace(/[-_]/g, '');
+        const dCleanCode = dMCode.toLowerCase().replace(/[-_]/g, '');
+        const isMatch = candidateMemberIds.has(dMId) || candidateMemberIds.has(dMCode) || candidateMemberIds.has(dCleanId) || candidateMemberIds.has(dCleanCode);
+        if (!isMatch) return false;
+        if (dData.isBase || Number(dData.month) === 0) return false;
+        return Number(dData.month) === month && Number(dData.year) === year;
+      });
+
+      const docId = `C_${memberId}_${year}_${String(month).padStart(2, '0')}`;
+      const docRef = doc(db, 'groups', targetGroupId, 'monthly_contributions', docId);
+      const isUpdated = existingMonthlyDocs.length > 0 || (await getDoc(docRef)).exists();
+
+      const contributionPayload = {
+        id: docId,
+        contribId: docId,
+        contrib_id: docId,
+        groupId: targetGroupId,
+        group_id: targetGroupId,
+        memberId,
         member_id: memberId,
+        memberName,
+        member_name: memberName,
+        memberCode,
+        member_code: memberCode,
         month,
         year,
+        isBase: false,
+        type: 'SAVING',
+        expectedAmount: amount,
+        expected_amount: amount,
+        regularHaftaAmount: amount,
+        regular_hafta_amount: amount,
+        paidAmount: amount,
+        paid_amount: amount,
         amount,
+        totalPaid: amount,
+        total_paid: amount,
+        loanPrincipalPaid: 0,
+        loan_principal_paid: 0,
+        interestAmount: 0,
+        interest_amount: 0,
+        interest: 0,
+        status: 'PAID',
+        status_lower: 'paid',
+        paymentDate,
         payment_date: paymentDate,
+        paymentMode: mode,
         payment_mode: mode,
+        notes,
         remarks: notes,
-      }, targetGroupId);
+        updatedAt: new Date().toISOString(),
+      };
+
+      if (!isUpdated) {
+        contributionPayload.createdAt = new Date().toISOString();
+      }
+
+      await setDoc(docRef, contributionPayload, { merge: true });
+
+      // Clean up any duplicate/alternate doc IDs for this specific member + month + year so exactly ONE record exists
+      for (const d of existingMonthlyDocs) {
+        if (d.id !== docId) {
+          try {
+            await deleteDoc(doc(db, 'groups', targetGroupId, 'monthly_contributions', d.id));
+          } catch (delErr) {
+            console.warn('Notice: cleanup duplicate month doc error:', delErr);
+          }
+        }
+      }
+
+      // Log activity
+      const actId = `ACT_${Date.now()}_saving`;
+      await setDoc(doc(db, 'groups', targetGroupId, 'activities', actId), {
+        id: actId,
+        type: 'saving',
+        amount,
+        description: isUpdated
+          ? `Historical monthly savings ₹${amount.toLocaleString('en-IN')} updated for ${memberName} (${formatMonthYear(month, year)})`
+          : `Historical monthly savings ₹${amount.toLocaleString('en-IN')} recorded for ${memberName} (${formatMonthYear(month, year)})`,
+        memberId,
+        memberName,
+        referenceId: docId,
+        month,
+        year,
+        date: paymentDate,
+        createdAt: new Date().toISOString(),
+      });
+
+      // Recalculate member total savings from contributions
+      try {
+        const refreshedContribsSnap = await getDocs(collection(db, 'groups', targetGroupId, 'monthly_contributions'));
+        const seenMemberMonths = new Set();
+        let baseAmount = 0;
+        let memberMonthlySavingsTotal = 0;
+
+        refreshedContribsSnap.docs.forEach((d) => {
+          const norm = normalizeSavings(d.id, d.data());
+          const sMId = String(norm.memberId || norm.member_id || '');
+          const sMCode = String(norm.memberCode || norm.member_code || '');
+          const sCleanId = sMId.toLowerCase().replace(/[-_]/g, '');
+          const sCleanCode = sMCode.toLowerCase().replace(/[-_]/g, '');
+
+          const isMatch = candidateMemberIds.has(sMId) || candidateMemberIds.has(sMCode) || candidateMemberIds.has(sCleanId) || candidateMemberIds.has(sCleanCode);
+          if (!isMatch) return;
+
+          if (norm.isBase || norm.month === 0) {
+            baseAmount = norm.paidAmount || norm.amount || 0;
+            return;
+          }
+
+          const dedupKey = `${norm.year}_${norm.month}`;
+          if (seenMemberMonths.has(dedupKey)) return;
+          seenMemberMonths.add(dedupKey);
+
+          const pureAmt = norm.paidAmount !== undefined ? norm.paidAmount : (norm.amount || 0);
+
+          if (norm.isPaid || pureAmt > 0) {
+            memberMonthlySavingsTotal += pureAmt;
+          }
+        });
+
+        const newTotalSavings = baseAmount + memberMonthlySavingsTotal;
+
+        await updateDoc(memRef, {
+          totalSavings: newTotalSavings,
+          total_savings: newTotalSavings,
+          updatedAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        console.warn('Notice: Member total savings update on historical saving:', e);
+      }
+
+      // Authoritative synchronization of group summary metrics
+      await groupService.recalculateAndSyncGroupAggregates(targetGroupId);
+
+      return {
+        success: true,
+        message: isUpdated ? 'Historical monthly saving updated successfully' : 'Historical monthly saving saved successfully',
+        id: docId,
+        isUpdated,
+      };
     } catch (err) {
       console.error('Failed to record historical monthly saving:', err);
       throw new Error(err.message || 'Failed to record historical monthly saving.');

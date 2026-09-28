@@ -544,7 +544,19 @@ export const normalizeSavings = (id, data = {}) => {
 
   let paidAmount = 0;
   if (isBase) {
-    paidAmount = Number(data.paidAmount || data.paid_amount || data.amount || data.totalPaid || data.total_paid || 10000);
+    paidAmount = Number(
+      data.paidAmount !== undefined && data.paidAmount !== null && !isNaN(Number(data.paidAmount))
+        ? data.paidAmount
+        : (data.paid_amount !== undefined && data.paid_amount !== null && !isNaN(Number(data.paid_amount))
+            ? data.paid_amount
+            : (data.amount !== undefined && data.amount !== null && !isNaN(Number(data.amount))
+                ? data.amount
+                : (data.totalPaid !== undefined && data.totalPaid !== null && !isNaN(Number(data.totalPaid))
+                    ? data.totalPaid
+                    : (data.total_paid !== undefined && data.total_paid !== null && !isNaN(Number(data.total_paid))
+                        ? data.total_paid
+                        : 10000))))
+    );
   } else if (isPaid) {
     if (data.paidAmount !== undefined && data.paidAmount !== null && Number(data.paidAmount) > 0) {
       paidAmount = Number(data.paidAmount);

@@ -25,6 +25,8 @@ export const translations = {
       "save": "Save",
       "saveChanges": "Save Changes",
       "cancel": "Cancel",
+      "yes": "Yes",
+      "saving": "Saving",
       "confirm": "Confirm",
       "submit": "Submit",
       "back": "Back",
@@ -655,7 +657,18 @@ export const translations = {
       "editingExistingLoan": "Editing existing {monthYear} loan",
       "updateSavingsBtn": "Update Historical Monthly Saving",
       "savingUpdatedSuccess": "Historical monthly saving updated successfully.",
-      "editingExistingSaving": "Editing existing {monthYear} saving"
+      "editingExistingSaving": "Editing existing {monthYear} saving",
+      "loanIncreaseCannotExceed": "Loan amount increase of {increase} exceeds available balance of {amount}.",
+      "loanIncreaseExceedsZero": "Cannot increase loan amount when available balance is ₹0.",
+      "confirmDeleteSaving": "Are you sure you want to delete the historical saving record for {monthYear} ({amount})?",
+      "savingDeletedSuccess": "Historical monthly saving deleted successfully.",
+      "confirmDeleteLoan": "Are you sure you want to delete this historical loan of {amount}?",
+      "loanDeletedSuccess": "Historical loan deleted successfully.",
+      "confirmDeleteRepayment": "Are you sure you want to delete this historical repayment of {amount}?",
+      "repaymentDeletedSuccess": "Historical repayment deleted successfully.",
+      "activeLoanExistsError": "This member already has an active outstanding loan. A new loan cannot be issued until the existing loan is fully repaid.",
+      "confirmDeleteTitle": "Are you sure you want to delete?",
+      "invalidDateError": "Please enter a valid date with a 4-digit year (e.g. 2026)."
     }
   },
   "mr": {
@@ -679,6 +692,8 @@ export const translations = {
       "save": "सेव्ह करा",
       "saveChanges": "बदल सेव्ह करा",
       "cancel": "रद्द करा",
+      "yes": "होय",
+      "saving": "बचत",
       "confirm": "खात्री करा",
       "submit": "सबमिट करा",
       "back": "मागे",
@@ -1309,7 +1324,18 @@ export const translations = {
       "editingExistingLoan": "विद्यमान {monthYear} चे कर्ज संपादित करत आहे",
       "updateSavingsBtn": "जुनी मासिक बचत अपडेट करा",
       "savingUpdatedSuccess": "जुनी मासिक बचत यशस्वीरित्या अपडेट झाली.",
-      "editingExistingSaving": "विद्यमान {monthYear} ची बचत संपादित करत आहे"
+      "editingExistingSaving": "विद्यमान {monthYear} ची बचत संपादित करत आहे",
+      "loanIncreaseCannotExceed": "कर्ज रकमेतील {increase} वाढ उपलब्ध शिल्लक {amount} पेक्षा जास्त आहे.",
+      "loanIncreaseExceedsZero": "उपलब्ध शिल्लक ₹० असताना कर्ज रक्कम वाढवता येत नाही.",
+      "confirmDeleteSaving": "तुम्हाला खात्री आहे का की तुम्ही {monthYear} ची जुनी बचत नोंद ({amount}) हटवू इच्छिता?",
+      "savingDeletedSuccess": "जुनी मासिक बचत यशस्वीरित्या हटवली.",
+      "confirmDeleteLoan": "तुम्हाला खात्री आहे का की तुम्ही {amount} चे जुने कर्ज हटवू इच्छिता?",
+      "loanDeletedSuccess": "जुने कर्ज यशस्वीरित्या हटवले.",
+      "confirmDeleteRepayment": "तुम्हाला खात्री आहे का की तुम्ही {amount} ची जुनी परतफेड नोंद हटवू इच्छिता?",
+      "repaymentDeletedSuccess": "जुनी परतफेड यशस्वीरित्या हटवली.",
+      "activeLoanExistsError": "या सभासदाचे आधीच सक्रिय थकीत कर्ज आहे. विद्यमान कर्जाची पूर्ण परतफेड होईपर्यंत नवीन कर्ज दिले जाऊ शकत नाही.",
+      "confirmDeleteTitle": "तुम्हाला खात्री आहे का की तुम्ही ही नोंद हटवू इच्छिता?",
+      "invalidDateError": "कृपया ४-अंकी वर्षासह वैध तारीख प्रविष्ट करा (उदा. २०२६)."
     }
   }
 };

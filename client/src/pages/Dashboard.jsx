@@ -387,20 +387,75 @@ const Dashboard = () => {
       const lowerDesc = rawDesc.toLowerCase();
       const amtStr = amount > 0 ? `₹${amount.toLocaleString('en-IN')}` : '';
 
-      // 1. Member Permanent Deletion
-      const isDeletion =
-        type.includes('DELETE') ||
-        type.includes('DELETED') ||
+      // 1. Historical Loan Deletion (from Manual Historical Data Adjustment)
+      if (
+        type === 'LOAN_DELETED' ||
+        type === 'HISTORICAL_LOAN_DELETED' ||
+        (lowerDesc.includes('historical loan') && (lowerDesc.includes('deleted') || lowerDesc.includes('हटवले') || lowerDesc.includes('हटवला'))) ||
+        lowerDesc.startsWith('historical loan of')
+      ) {
+        let resolvedName = memberName;
+        if (!resolvedName && rawDesc) {
+          const match = rawDesc.match(/for\s+([^—–(]+)/i) || rawDesc.match(/(?:deleted|हटवला|हटवले)[:\s-]+(.+)$/i);
+          if (match && match[1]) {
+            resolvedName = match[1].replace(/\(.*\)/, '').trim();
+          }
+        }
+        if (!resolvedName) resolvedName = 'Member';
+        const formattedAmt = amtStr || (rawDesc.match(/₹\s*[\d,]+/)?.[0] || '₹0');
+        return `Historical loan of ${formattedAmt} deleted for ${resolvedName}`;
+      }
+
+      // 2. Historical Monthly Saving Deletion (from Manual Historical Data Adjustment)
+      if (
+        type === 'SAVING_DELETED' ||
+        type === 'HISTORICAL_SAVING_DELETED' ||
+        (lowerDesc.includes('historical') && lowerDesc.includes('saving') && (lowerDesc.includes('deleted') || lowerDesc.includes('हटवले') || lowerDesc.includes('हटवला'))) ||
+        lowerDesc.startsWith('historical monthly saving') ||
+        lowerDesc.startsWith('historical monthly savings')
+      ) {
+        let resolvedName = memberName;
+        if (!resolvedName && rawDesc) {
+          const match = rawDesc.match(/for\s+([^—–(]+)/i) || rawDesc.match(/(?:deleted|हटवला|हटवले)[:\s-]+(.+)$/i);
+          if (match && match[1]) {
+            resolvedName = match[1].replace(/\(.*\)/, '').trim();
+          }
+        }
+        if (!resolvedName) resolvedName = 'Member';
+        const formattedAmt = amtStr || (rawDesc.match(/₹\s*[\d,]+/)?.[0] || '₹0');
+        return `Historical monthly saving of ${formattedAmt} deleted for ${resolvedName}`;
+      }
+
+      // 3. Historical Repayment Deletion (from Manual Historical Data Adjustment)
+      if (
+        type === 'REPAYMENT_DELETED' ||
+        type === 'HISTORICAL_REPAYMENT_DELETED' ||
+        (lowerDesc.includes('historical repayment') && (lowerDesc.includes('deleted') || lowerDesc.includes('हटवले') || lowerDesc.includes('हटवला')))
+      ) {
+        let resolvedName = memberName;
+        if (!resolvedName && rawDesc) {
+          const match = rawDesc.match(/for\s+([^—–(]+)/i) || rawDesc.match(/(?:deleted|हटवला|हटवले)[:\s-]+(.+)$/i);
+          if (match && match[1]) {
+            resolvedName = match[1].replace(/\(.*\)/, '').trim();
+          }
+        }
+        if (!resolvedName) resolvedName = 'Member';
+        const formattedAmt = amtStr || (rawDesc.match(/₹\s*[\d,]+/)?.[0] || '₹0');
+        return `Historical repayment of ${formattedAmt} deleted for ${resolvedName}`;
+      }
+
+      // 4. Member Permanent Deletion (from Members workflow)
+      const isMemberPermanentDeletion =
+        type === 'MEMBER_SETTLED_AND_DELETED' ||
         type === 'MEMBER_DELETED' ||
         type === 'DELETE_MEMBER' ||
         type === 'MEMBER_DELETION' ||
+        lowerDesc.includes('member permanently deleted') ||
+        lowerDesc.includes('member account settled & deleted') ||
         lowerDesc.includes('permanently deleted') ||
-        lowerDesc.includes('deleted') ||
-        lowerDesc.includes('कायमचा हटवला') ||
-        lowerDesc.includes('हटवला') ||
-        lowerDesc.includes('हटवले');
+        lowerDesc.includes('सभासद कायमचा हटवला');
 
-      if (isDeletion) {
+      if (isMemberPermanentDeletion) {
         let resolvedName = memberName;
         if (!resolvedName && rawDesc) {
           const match = rawDesc.match(/(?:deleted|हटवला|हटवले)[:\s-]+(.+)$/i);

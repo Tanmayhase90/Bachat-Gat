@@ -63,10 +63,16 @@ export const formatPercentage = (value) => {
   return `${Math.min(100, Math.max(0, Math.round(num)))}%`;
 };
 
+const SHORT_MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
 /**
- * Safely format dates (handles Firebase Timestamp, Date object, ISO string, milliseconds)
+ * Safely format dates to DD Mon YYYY (e.g. "10 Dec 2026", "01 Jul 2026", "15 Aug 2026")
+ * (handles Firebase Timestamp, Date object, ISO string, milliseconds, and DD-MM-YYYY)
  */
-export const formatDate = (value, options = { day: 'numeric', month: 'short', year: 'numeric' }) => {
+export const formatDate = (value) => {
   if (!value) return '-';
   try {
     let d;
@@ -76,14 +82,29 @@ export const formatDate = (value, options = { day: 'numeric', month: 'short', ye
       d = new Date(value.seconds * 1000);
     } else if (value instanceof Date) {
       d = value;
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+        const [y, m, day] = trimmed.split('T')[0].split('-').map(Number);
+        d = new Date(y, m - 1, day);
+      } else if (/^\d{2}-\d{2}-\d{4}/.test(trimmed)) {
+        const [day, m, y] = trimmed.split('-').map(Number);
+        d = new Date(y, m - 1, day);
+      } else {
+        d = new Date(trimmed);
+      }
     } else {
       d = new Date(value);
     }
 
-    if (isNaN(d.getTime())) return String(value) || '-';
-    return d.toLocaleDateString('en-IN', options);
+    if (isNaN(d.getTime())) return '-';
+    const year = d.getFullYear();
+    if (year < 1900 || year > 2099) return '-';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = SHORT_MONTH_NAMES[d.getMonth()] || 'Jan';
+    return `${day} ${month} ${year}`;
   } catch (err) {
-    return String(value) || '-';
+    return '-';
   }
 };
 

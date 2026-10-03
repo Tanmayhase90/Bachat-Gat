@@ -92,9 +92,7 @@ const Settings = () => {
   const [backupActionLoading, setBackupActionLoading] = useState('');
   const [driveProfile, setDriveProfile] = useState(backupService.getDriveProfile());
   const driveConnected = Boolean(driveProfile && (driveProfile.email || driveProfile.name));
-  const [driveEmail, setDriveEmail] = useState(
-    backupService.getTargetEmail() || driveProfile?.email || ''
-  );
+  const [driveEmail, setDriveEmail] = useState('');
   const [emailError, setEmailError] = useState('');
   const [lastBackupTime, setLastBackupTime] = useState(backupService.getLastBackupTime());
   const [copiedMachineId, setCopiedMachineId] = useState(false);

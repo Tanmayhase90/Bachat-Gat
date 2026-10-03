@@ -365,16 +365,30 @@ export const backupService = {
     await backupService.loadGoogleScript();
 
     return new Promise((resolve, reject) => {
+      let isSettled = false;
+
+      const safeResolve = (val) => {
+        if (isSettled) return;
+        isSettled = true;
+        resolve(val);
+      };
+
+      const safeReject = (err) => {
+        if (isSettled) return;
+        isSettled = true;
+        reject(err);
+      };
+
       try {
         gisTokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope: 'https://www.googleapis.com/auth/drive.file',
           callback: async (tokenResponse) => {
             if (tokenResponse.error) {
-              return reject(new Error(tokenResponse.error_description || tokenResponse.error));
+              return safeReject(new Error(tokenResponse.error_description || tokenResponse.error));
             }
             if (!tokenResponse.access_token) {
-              return reject(new Error('No access token received from Google.'));
+              return safeReject(new Error('No access token received from Google.'));
             }
 
             activeDriveAccessToken = tokenResponse.access_token;
@@ -395,12 +409,24 @@ export const backupService = {
               if (resolvedEmail && resolvedEmail !== 'Connected Account') {
                 localStorage.setItem(STORAGE_KEYS.TARGET_EMAIL, resolvedEmail);
               }
-              resolve(resolvedProfile);
+              safeResolve(resolvedProfile);
             } catch (err) {
               // Fallback profile if userinfo endpoint fails
               const fallback = { email: emailToUse || 'Connected Account', name: 'Google User', picture: null };
               localStorage.setItem(STORAGE_KEYS.DRIVE_PROFILE, JSON.stringify(fallback));
-              resolve(fallback);
+              safeResolve(fallback);
+            }
+          },
+          error_callback: (error) => {
+            const errorType = error?.type || '';
+            if (errorType === 'popup_closed') {
+              safeReject(new Error('Google authorization popup was closed.'));
+            } else if (errorType === 'popup_blocked_by_browser') {
+              safeReject(new Error('Google authorization popup was blocked by your browser. Please allow popups for this site.'));
+            } else if (errorType === 'access_denied') {
+              safeReject(new Error('Google Drive authorization access was denied.'));
+            } else {
+              safeReject(new Error(error?.message || errorType || 'Google Drive connection cancelled or failed.'));
             }
           },
         });
@@ -411,7 +437,7 @@ export const backupService = {
         }
         gisTokenClient.requestAccessToken(tokenRequestOptions);
       } catch (err) {
-        reject(err);
+        safeReject(err);
       }
     });
   },

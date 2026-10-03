@@ -21,7 +21,36 @@ import {
   Clock,
   FileText,
   RotateCcw,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
+
+const sanitizeDateInput = (val) => {
+  if (!val) return '';
+  const trimmed = String(val).trim();
+  const match = trimmed.match(/^(\d+)-(\d{2})-(\d{2})$/);
+  if (match) {
+    let year = match[1];
+    const month = match[2];
+    const day = match[3];
+    if (year.length > 4) {
+      year = year.slice(0, 4);
+    }
+    return `${year}-${month}-${day}`;
+  }
+  return trimmed;
+};
+
+const isValid4DigitDate = (val) => {
+  if (!val || typeof val !== 'string') return false;
+  const trimmed = val.trim();
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return false;
+  const y = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const d = parseInt(match[3], 10);
+  return y >= 1900 && y <= 2099 && m >= 1 && m <= 12 && d >= 1 && d <= 31;
+};
 
 const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null }) => {
   const { t, language } = useLanguage();
@@ -64,6 +93,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     loan_date: '2026-07-15',
     purpose: 'Historical Loan',
   });
+  const [editingLoan, setEditingLoan] = useState(null);
 
   const [repayForm, setRepayForm] = useState({
     loan_id: '',
@@ -80,6 +110,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [availableBalance, setAvailableBalance] = useState(null);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const toastTimeoutRef = useRef(null);
@@ -274,73 +305,71 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     }
   }, [isOpen, selectedMemberId, formSavingsMonth, formSavingsYear, existingMonthSaving]);
 
-  // Determine current loan form month/year and detect existing loan for same month/year
+  // Reset editing loan when member selection changes
+  useEffect(() => {
+    setEditingLoan(null);
+  }, [selectedMemberId]);
+
+  // Determine current loan form month/year
   const { month: formLoanMonth, year: formLoanYear } = getLoanMonthYear(loanForm.loan_date);
 
-  const existingMonthLoan = (memberHistorical?.loans || []).find((l) => {
-    const lDate = l.issueDate || l.loanDate || l.loan_date || l.createdAt;
-    const { month: lMonth, year: lYear } = getLoanMonthYear(lDate);
-    return lMonth === formLoanMonth && lYear === formLoanYear;
+  const isEditingLoan = Boolean(editingLoan && (editingLoan.id || editingLoan.loanId));
+  const existingLoanPrincipal = isEditingLoan
+    ? Number(editingLoan.originalPrincipal !== undefined ? editingLoan.originalPrincipal : (editingLoan.principalAmount || editingLoan.principal_amount || 0))
+    : 0;
+
+  // Check if member already has an active outstanding loan
+  const activeOutstandingLoan = (memberHistorical?.loans || []).find((l) => {
+    const status = String(l.status || '').toUpperCase();
+    const pending = Number(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount ?? l.outstandingAmount ?? 0));
+    return status === 'ACTIVE' && pending > 0;
   });
 
-  // Auto-populate loan form when existing loan is detected for selected member & month/year
-  const lastLoadedLoanKeyRef = useRef('');
+  const hasActiveOutstandingLoan = !isEditingLoan && Boolean(activeOutstandingLoan);
 
-  useEffect(() => {
-    if (!isOpen) {
-      lastLoadedLoanKeyRef.current = '';
-      return;
-    }
-    if (selectedMemberId && formLoanMonth && formLoanYear) {
-      const loanKey = `${selectedMemberId}_${formLoanYear}_${formLoanMonth}`;
-      if (lastLoadedLoanKeyRef.current !== loanKey) {
-        lastLoadedLoanKeyRef.current = loanKey;
-        if (existingMonthLoan) {
-          setLoanForm((prev) => ({
-            ...prev,
-            principal_amount: String(
-              existingMonthLoan.originalPrincipal !== undefined
-                ? existingMonthLoan.originalPrincipal
-                : (existingMonthLoan.principalAmount || existingMonthLoan.principal_amount || '5000')
-            ),
-            interest_rate: String(
-              existingMonthLoan.interestRate !== undefined
-                ? existingMonthLoan.interestRate
-                : (existingMonthLoan.interest_rate || '2.0')
-            ),
-            duration_months: String(
-              existingMonthLoan.durationMonths || existingMonthLoan.duration_months || '12'
-            ),
-            purpose: existingMonthLoan.purpose || 'Historical Loan',
-            loan_date: existingMonthLoan.issueDate || existingMonthLoan.loanDate || existingMonthLoan.loan_date || prev.loan_date,
-          }));
-        }
-      }
-    }
-  }, [isOpen, selectedMemberId, formLoanMonth, formLoanYear, existingMonthLoan]);
-
-  // Real-time Historical Loan available balance validation (strictly against actual group available balance)
+  // Real-time Historical Loan available balance validation (strictly against delta available balance)
   const enteredLoanPrincipal = parseFloat(loanForm.principal_amount);
 
-  const isLoanAmountInvalid =
-    availableBalance !== null &&
-    (
-      (availableBalance <= 0 && (!Number.isFinite(enteredLoanPrincipal) || enteredLoanPrincipal > 0)) ||
-      (Number.isFinite(enteredLoanPrincipal) && enteredLoanPrincipal > availableBalance)
-    );
+  const additionalRequired = Number.isFinite(enteredLoanPrincipal)
+    ? enteredLoanPrincipal - existingLoanPrincipal
+    : 0;
 
-  const loanValidationErrorMessage = isLoanAmountInvalid
+  const isLoanAmountInvalid =
+    !Number.isFinite(enteredLoanPrincipal) ||
+    enteredLoanPrincipal <= 0 ||
+    (availableBalance !== null && (
+      isEditingLoan
+        ? (additionalRequired > 0 && (availableBalance <= 0 || additionalRequired > availableBalance))
+        : (availableBalance <= 0 || enteredLoanPrincipal > availableBalance)
+    ));
+
+  const loanValidationErrorMessage = isLoanAmountInvalid && Number.isFinite(enteredLoanPrincipal) && enteredLoanPrincipal > 0
     ? (
-        availableBalance <= 0
-          ? t('adjustment.loanExceedsZero', 'Loan amount cannot exceed available balance of ₹0.')
-          : t('adjustment.loanAmountCannotExceed', { amount: formatCurrency(availableBalance) }) ||
-            `Loan amount cannot exceed available balance of ${formatCurrency(availableBalance)}.`
+        isEditingLoan
+          ? (
+              availableBalance <= 0
+                ? t('adjustment.loanIncreaseExceedsZero', 'Cannot increase loan amount when available balance is ₹0.')
+                : t('adjustment.loanIncreaseCannotExceed', {
+                    increase: formatCurrency(additionalRequired),
+                    amount: formatCurrency(availableBalance),
+                  }) || `Loan amount increase of ${formatCurrency(additionalRequired)} exceeds available balance of ${formatCurrency(availableBalance)}.`
+            )
+          : (
+              availableBalance <= 0
+                ? t('adjustment.loanExceedsZero', 'Loan amount cannot exceed available balance of ₹0.')
+                : t('adjustment.loanAmountCannotExceed', { amount: formatCurrency(availableBalance) }) ||
+                  `Loan amount cannot exceed available balance of ${formatCurrency(availableBalance)}.`
+            )
       )
     : '';
 
   // 1. Submit Initial One-Time Opening Amount
   const handleSaveInitial = async (e) => {
     e.preventDefault();
+    if (!isValid4DigitDate(initialForm.payment_date)) {
+      setError(t('adjustment.invalidDateError', 'Please enter a valid date with a 4-digit year (e.g. 2026).'));
+      return;
+    }
     try {
       setSubmitting(true);
       setError('');
@@ -363,6 +392,10 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
   // 2. Submit Historical Monthly Saving
   const handleSaveSavings = async (e) => {
     e.preventDefault();
+    if (!isValid4DigitDate(savingsForm.payment_date)) {
+      setError(t('adjustment.invalidDateError', 'Please enter a valid date with a 4-digit year (e.g. 2026).'));
+      return;
+    }
     try {
       setSubmitting(true);
       setError('');
@@ -439,12 +472,80 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
   };
 
   // 3. Submit Historical Loan (with Unique Month/Year Update vs Create & Available Balance protection)
+  // 3. Submit Historical Loan (Dedicated EDIT Mode vs CREATE Mode)
   const handleSaveLoan = async (e) => {
     e.preventDefault();
+    if (!isValid4DigitDate(loanForm.loan_date)) {
+      setError(t('adjustment.invalidDateError', 'Please enter a valid date with a 4-digit year (e.g. 2026).'));
+      return;
+    }
     const enteredPrincipal = parseFloat(loanForm.principal_amount);
 
     if (!Number.isFinite(enteredPrincipal) || isNaN(enteredPrincipal) || enteredPrincipal <= 0) {
       setError(t('modals.invalidLoanAmount', 'Please enter a valid positive loan amount.'));
+      return;
+    }
+
+    // ============================================================
+    // EDIT MODE: Update the exact selected loan document
+    // ============================================================
+    if (isEditingLoan) {
+      const additionalRequired = enteredPrincipal - existingLoanPrincipal;
+
+      if (additionalRequired > 0 && availableBalance !== null) {
+        if (availableBalance <= 0) {
+          setError(t('adjustment.loanIncreaseExceedsZero', 'Cannot increase loan amount when available balance is ₹0.'));
+          return;
+        }
+        if (additionalRequired > availableBalance) {
+          const addStr = formatCurrency(additionalRequired);
+          const maxStr = formatCurrency(availableBalance);
+          setError(
+            t('adjustment.loanIncreaseCannotExceed', { increase: addStr, amount: maxStr }) ||
+            `Loan amount increase of ${addStr} exceeds available balance of ${maxStr}.`
+          );
+          return;
+        }
+      }
+
+      try {
+        setSubmitting(true);
+        setError('');
+        const targetLoanDocId = editingLoan.id || editingLoan.loanId;
+        await adjustmentService.updateHistoricalLoan(targetLoanDocId, {
+          member_id: selectedMemberId,
+          principal_amount: loanForm.principal_amount,
+          interest_rate: loanForm.interest_rate,
+          duration_months: loanForm.duration_months,
+          loan_date: loanForm.loan_date,
+          purpose: loanForm.purpose,
+        });
+
+        showSuccessToast(t('adjustment.loanUpdatedSuccess', 'Historical loan updated successfully.'));
+        setEditingLoan(null);
+        setLoanForm({
+          principal_amount: '5000',
+          interest_rate: '2.0',
+          duration_months: '12',
+          loan_date: loanForm.loan_date,
+          purpose: 'Historical Loan',
+        });
+        await refreshMemberData();
+      } catch (err) {
+        setError(err.message || 'Failed to update historical loan');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // ============================================================
+    // CREATE MODE: Create a new loan only when NOT editing an existing loan
+    // ============================================================
+    if (activeOutstandingLoan) {
+      setError(
+        t('adjustment.activeLoanExistsError', 'This member already has an active outstanding loan. A new loan cannot be issued until the existing loan is fully repaid.')
+      );
       return;
     }
 
@@ -454,11 +555,8 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
         return;
       }
       if (enteredPrincipal > availableBalance) {
-        const maxStr = formatCurrency(availableBalance);
-        setError(
-          t('adjustment.loanAmountCannotExceed', { amount: maxStr }) ||
-          `Loan amount cannot exceed available balance of ${maxStr}.`
-        );
+        setError(t('adjustment.loanAmountCannotExceed', { amount: formatCurrency(availableBalance) }) ||
+          `Loan amount cannot exceed available balance of ${formatCurrency(availableBalance)}.`);
         return;
       }
     }
@@ -466,7 +564,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     try {
       setSubmitting(true);
       setError('');
-      const res = await adjustmentService.recordHistoricalLoan({
+      await adjustmentService.createHistoricalLoan({
         member_id: selectedMemberId,
         principal_amount: loanForm.principal_amount,
         interest_rate: loanForm.interest_rate,
@@ -475,11 +573,14 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
         purpose: loanForm.purpose,
       });
 
-      const successMsg = res.isUpdated
-        ? t('adjustment.loanUpdatedSuccess', 'Historical loan updated successfully.')
-        : t('adjustment.loanSuccess', 'Historical loan saved successfully.');
-
-      showSuccessToast(successMsg);
+      showSuccessToast(t('adjustment.loanSuccess', 'Historical loan saved successfully.'));
+      setLoanForm({
+        principal_amount: '5000',
+        interest_rate: '2.0',
+        duration_months: '12',
+        loan_date: loanForm.loan_date,
+        purpose: 'Historical Loan',
+      });
       await refreshMemberData();
     } catch (err) {
       setError(err.message || 'Failed to record historical loan');
@@ -491,6 +592,10 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
   // 4. Submit Historical Repayment
   const handleSaveRepayment = async (e) => {
     e.preventDefault();
+    if (!isValid4DigitDate(repayForm.payment_date)) {
+      setError(t('adjustment.invalidDateError', 'Please enter a valid date with a 4-digit year (e.g. 2026).'));
+      return;
+    }
     try {
       setSubmitting(true);
       setError('');
@@ -515,6 +620,167 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // Edit / Delete action handlers for recorded historical entries
+  const handleEditInitial = () => {
+    setActiveTab('initial');
+    setError('');
+    if (memberHistorical?.initialEntry) {
+      const e = memberHistorical.initialEntry;
+      setInitialForm({
+        amount: String(e.paidAmount !== undefined ? e.paidAmount : (memberHistorical.initialAmount || '10000')),
+        payment_date: e.paymentDate || e.payment_date || '2026-07-01',
+        payment_mode: e.paymentMode || e.payment_mode || 'Opening Balance',
+        remarks: e.remarks || e.notes || 'Initial group opening amount',
+      });
+    }
+  };
+
+  const handleEditSaving = (s) => {
+    setActiveTab('savings');
+    setError('');
+    setSavingsForm({
+      month: String(s.month || '7'),
+      year: String(s.year || '2026'),
+      amount: String(s.paidAmount !== undefined ? s.paidAmount : (s.amount || '1000')),
+      payment_date: s.paymentDate || s.payment_date || `${s.year || 2026}-${String(s.month || 7).padStart(2, '0')}-10`,
+      payment_mode: (s.paymentMode && s.paymentMode !== 'Opening Balance') ? s.paymentMode : (s.payment_mode || 'Cash'),
+      remarks: s.remarks || s.notes || '',
+    });
+  };
+
+  const handleDeleteSaving = (s) => {
+    const monthYearStr = formatMonthYear(s.month, s.year, language);
+    const amountStr = formatCurrency(s.paidAmount !== undefined ? s.paidAmount : s.amount);
+    setDeleteConfirm({
+      type: 'saving',
+      title: t('adjustment.confirmDeleteTitle', 'Are you sure you want to delete?'),
+      recordInfo: `${monthYearStr} ${t('common.saving', 'Saving')} — ${amountStr}`,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          setError('');
+          await adjustmentService.deleteHistoricalSaving(s.id, selectedMemberId);
+
+          // Optimistically remove from local state
+          setMemberHistorical((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              savings: (prev.savings || []).filter((item) => item.id !== s.id),
+            };
+          });
+
+          showSuccessToast(t('adjustment.savingDeletedSuccess', 'Historical monthly saving deleted successfully.'));
+          await refreshMemberData();
+        } catch (err) {
+          setError(err.message || 'Failed to delete historical saving');
+        } finally {
+          setSubmitting(false);
+          setDeleteConfirm(null);
+        }
+      },
+    });
+  };
+
+  const handleEditLoan = (l) => {
+    setActiveTab('loan');
+    setError('');
+    const rawDate = l.issueDate || l.loanDate || l.loan_date || l.createdAt || new Date().toISOString().split('T')[0];
+    const formattedDate = typeof rawDate === 'string' && rawDate.includes('T') ? rawDate.split('T')[0] : String(rawDate);
+    setEditingLoan(l);
+    setLoanForm({
+      principal_amount: String(l.originalPrincipal !== undefined ? l.originalPrincipal : (l.principalAmount || '5000')),
+      interest_rate: String(l.interestRate !== undefined ? l.interestRate : '2.0'),
+      duration_months: String(l.durationMonths || l.duration_months || '12'),
+      loan_date: formattedDate,
+      purpose: l.purpose || 'Historical Loan',
+    });
+  };
+
+  const handleCancelEditLoan = () => {
+    setEditingLoan(null);
+    setLoanForm({
+      principal_amount: '5000',
+      interest_rate: '2.0',
+      duration_months: '12',
+      loan_date: '2026-07-15',
+      purpose: 'Historical Loan',
+    });
+    setError('');
+  };
+
+  const handleDeleteLoan = (l) => {
+    const { month: lM, year: lY } = getLoanMonthYear(l.issueDate || l.loanDate || l.loan_date || l.createdAt);
+    const periodStr = lM && lY ? ` (${formatMonthYear(lM, lY, language)})` : '';
+    const amountStr = formatCurrency(l.originalPrincipal !== undefined ? l.originalPrincipal : (l.principalAmount || l.principal_amount));
+    const loanName = l.loanNumber || `LN-${String(l.id).slice(-6)}`;
+    setDeleteConfirm({
+      type: 'loan',
+      title: t('adjustment.confirmDeleteTitle', 'Are you sure you want to delete?'),
+      recordInfo: `${loanName}${periodStr} — ${amountStr}`,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          setError('');
+          await adjustmentService.deleteHistoricalLoan(l.id, selectedMemberId);
+
+          // Optimistically remove from local state
+          setMemberHistorical((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              loans: (prev.loans || []).filter((item) => item.id !== l.id),
+            };
+          });
+
+          showSuccessToast(t('adjustment.loanDeletedSuccess', 'Historical loan deleted successfully.'));
+          await refreshMemberData();
+        } catch (err) {
+          setError(err.message || 'Failed to delete historical loan');
+        } finally {
+          setSubmitting(false);
+          setDeleteConfirm(null);
+        }
+      },
+    });
+  };
+
+  const handleDeleteRepayment = (r) => {
+    const rawAmt = r.amount || r.totalPaid || ((r.principalAmount || 0) + (r.interestAmount || 0));
+    const amountStr = formatCurrency(rawAmt);
+    const rDate = r.paymentDate || r.payment_date ? formatDate(r.paymentDate || r.payment_date) : '';
+    const dateStr = rDate ? ` (${rDate})` : '';
+    setDeleteConfirm({
+      type: 'repayment',
+      title: t('adjustment.confirmDeleteTitle', 'Are you sure you want to delete?'),
+      recordInfo: `${t('adjustment.tabRepayments', 'Repayment')}${dateStr} — ${amountStr}`,
+      onConfirm: async () => {
+        try {
+          setSubmitting(true);
+          setError('');
+          await adjustmentService.deleteHistoricalRepayment(r.id, r.loanId || r.loan_id);
+
+          // Optimistically remove from local state
+          setMemberHistorical((prev) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              repayments: (prev.repayments || []).filter((item) => item.id !== r.id),
+            };
+          });
+
+          showSuccessToast(t('adjustment.repaymentDeletedSuccess', 'Historical repayment deleted successfully.'));
+          await refreshMemberData();
+        } catch (err) {
+          setError(err.message || 'Failed to delete historical repayment');
+        } finally {
+          setSubmitting(false);
+          setDeleteConfirm(null);
+        }
+      },
+    });
   };
 
   const months = [
@@ -826,9 +1092,16 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   type="date"
                   className="form-input"
                   value={initialForm.payment_date}
-                  onChange={(e) => setInitialForm({ ...initialForm, payment_date: e.target.value })}
+                  min="1900-01-01"
+                  max="2099-12-31"
+                  onChange={(e) => setInitialForm({ ...initialForm, payment_date: sanitizeDateInput(e.target.value) })}
                   required
                 />
+                {initialForm.payment_date && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', fontWeight: 500 }}>
+                    {formatDate(initialForm.payment_date)}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -893,6 +1166,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   {t('adjustment.editingExistingSaving', {
                     monthYear: formatMonthYear(formSavingsMonth, formSavingsYear, language),
                   }) || `Editing existing saving for ${formatMonthYear(formSavingsMonth, formSavingsYear, language)}`}: <strong>{formatCurrency(existingMonthSaving.paidAmount)}</strong>
+                  {(existingMonthSaving.paymentDate || existingMonthSaving.payment_date) && ` (${formatDate(existingMonthSaving.paymentDate || existingMonthSaving.payment_date)})`}
                 </span>
               </div>
             )}
@@ -926,16 +1200,16 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   className="form-input"
                   value={savingsForm.year}
                   onChange={(e) => {
-                    const y = e.target.value;
+                    const y = e.target.value.slice(0, 4);
                     setSavingsForm({
                       ...savingsForm,
                       year: y,
-                      payment_date: `${y}-${String(savingsForm.month).padStart(2, '0')}-10`,
+                      payment_date: y.length === 4 ? `${y}-${String(savingsForm.month).padStart(2, '0')}-10` : savingsForm.payment_date,
                     });
                   }}
                   placeholder="2026"
-                  min="2000"
-                  max="2100"
+                  min="1900"
+                  max="2099"
                   required
                 />
               </div>
@@ -961,9 +1235,16 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   type="date"
                   className="form-input"
                   value={savingsForm.payment_date}
-                  onChange={(e) => setSavingsForm({ ...savingsForm, payment_date: e.target.value })}
+                  min="1900-01-01"
+                  max="2099-12-31"
+                  onChange={(e) => setSavingsForm({ ...savingsForm, payment_date: sanitizeDateInput(e.target.value) })}
                   required
                 />
+                {savingsForm.payment_date && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', fontWeight: 500 }}>
+                    {formatDate(savingsForm.payment_date)}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1014,7 +1295,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
         {/* ============================================================ */}
         {activeTab === 'loan' && (
           <form onSubmit={handleSaveLoan} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {existingMonthLoan && (
+            {isEditingLoan && editingLoan && (
               <div
                 style={{
                   background: '#EFF6FF',
@@ -1025,14 +1306,54 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   color: '#1E40AF',
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'space-between',
                   gap: '6px',
                 }}
               >
-                <SlidersHorizontal size={14} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <SlidersHorizontal size={14} />
+                  <span>
+                    {t('adjustment.editingExistingLoan', 'Editing existing loan')}: <strong>{editingLoan.loanNumber || `LN-${String(editingLoan.id).slice(-6)}`}</strong> ({formatCurrency(editingLoan.originalPrincipal || editingLoan.principalAmount)})
+                    {(editingLoan.issueDate || editingLoan.loanDate || editingLoan.loan_date) && ` — ${formatDate(editingLoan.issueDate || editingLoan.loanDate || editingLoan.loan_date)}`}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCancelEditLoan}
+                  style={{
+                    background: '#FFFFFF',
+                    border: '1px solid #93C5FD',
+                    borderRadius: '4px',
+                    padding: '2px 8px',
+                    fontSize: '0.75rem',
+                    color: '#1E40AF',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t('common.cancel', 'Cancel Edit')}
+                </button>
+              </div>
+            )}
+
+            {hasActiveOutstandingLoan && (
+              <div
+                style={{
+                  background: '#FEF2F2',
+                  border: '1px solid #FCA5A5',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '10px 14px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  color: '#991B1B',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
                 <span>
-                  {t('adjustment.editingExistingLoan', {
-                    monthYear: formatMonthYear(formLoanMonth, formLoanYear, language),
-                  })}: <strong>{existingMonthLoan.loanNumber || `LN-${String(existingMonthLoan.id).slice(-6)}`}</strong> ({formatCurrency(existingMonthLoan.originalPrincipal)})
+                  {t('adjustment.activeLoanExistsError', 'This member already has an active outstanding loan. A new loan cannot be issued until the existing loan is fully repaid.')}
                 </span>
               </div>
             )}
@@ -1057,14 +1378,19 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   }}
                   placeholder="e.g. 5000"
                   min="1"
-                  max={availableBalance !== null && availableBalance > 0 ? availableBalance : undefined}
+                  max={
+                    availableBalance !== null
+                      ? (isEditingLoan ? existingLoanPrincipal + Math.max(0, availableBalance) : Math.max(0, availableBalance))
+                      : undefined
+                  }
                   style={{
                     borderColor: isLoanAmountInvalid ? '#EF4444' : undefined,
                     boxShadow: isLoanAmountInvalid ? '0 0 0 1px #EF4444' : undefined,
                   }}
+                  disabled={submitting || hasActiveOutstandingLoan}
                   required
                 />
-                {isLoanAmountInvalid && (
+                {isLoanAmountInvalid && !hasActiveOutstandingLoan && (
                   <div
                     style={{
                       marginTop: '5px',
@@ -1089,9 +1415,17 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   type="date"
                   className="form-input"
                   value={loanForm.loan_date}
-                  onChange={(e) => setLoanForm({ ...loanForm, loan_date: e.target.value })}
+                  min="1900-01-01"
+                  max="2099-12-31"
+                  onChange={(e) => setLoanForm({ ...loanForm, loan_date: sanitizeDateInput(e.target.value) })}
+                  disabled={submitting || hasActiveOutstandingLoan}
                   required
                 />
+                {loanForm.loan_date && (
+                  <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', fontWeight: 500 }}>
+                    {formatDate(loanForm.loan_date)}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1105,6 +1439,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   value={loanForm.interest_rate}
                   onChange={(e) => setLoanForm({ ...loanForm, interest_rate: e.target.value })}
                   placeholder="2.0"
+                  disabled={submitting || hasActiveOutstandingLoan}
                 />
               </div>
 
@@ -1116,6 +1451,7 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                   value={loanForm.duration_months}
                   onChange={(e) => setLoanForm({ ...loanForm, duration_months: e.target.value })}
                   placeholder="12"
+                  disabled={submitting || hasActiveOutstandingLoan}
                 />
               </div>
             </div>
@@ -1128,25 +1464,26 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                 value={loanForm.purpose}
                 onChange={(e) => setLoanForm({ ...loanForm, purpose: e.target.value })}
                 placeholder="e.g. Historical loan issued in July"
+                disabled={submitting || hasActiveOutstandingLoan}
               />
             </div>
 
             <button
               type="submit"
               className="btn-primary"
-              disabled={submitting || !selectedMemberId || isLoanAmountInvalid}
+              disabled={submitting || !selectedMemberId || isLoanAmountInvalid || hasActiveOutstandingLoan}
               style={{
                 marginTop: '6px',
                 alignSelf: 'flex-start',
                 padding: '10px 20px',
-                opacity: isLoanAmountInvalid ? 0.6 : 1,
-                cursor: isLoanAmountInvalid ? 'not-allowed' : 'pointer',
+                opacity: (isLoanAmountInvalid || hasActiveOutstandingLoan) ? 0.6 : 1,
+                cursor: (isLoanAmountInvalid || hasActiveOutstandingLoan) ? 'not-allowed' : 'pointer',
               }}
             >
               <HandCoins size={16} />{' '}
               {submitting
                 ? t('common.loading', 'Saving...')
-                : existingMonthLoan
+                : isEditingLoan
                 ? t('adjustment.updateLoanBtn', 'Update Historical Loan')
                 : t('adjustment.saveLoanBtn', 'Save Historical Loan')}
             </button>
@@ -1189,11 +1526,15 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                     required
                   >
                     <option value="">{t('common.select', 'Select a loan...')}</option>
-                    {memberHistorical.loans.map((l) => (
-                      <option key={l.id || l.loanId} value={l.id || l.loanId}>
-                        {l.loanNumber || `LN-${String(l.id).slice(-6)}`} — Principal: {formatCurrency(l.originalPrincipal || l.principalAmount)} | Outstanding: {formatCurrency(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0))} ({l.status || 'ACTIVE'})
-                      </option>
-                    ))}
+                    {memberHistorical.loans.map((l) => {
+                      const lDate = l.issueDate || l.loanDate || l.loan_date;
+                      const dateSuffix = lDate ? ` (${formatDate(lDate)})` : '';
+                      return (
+                        <option key={l.id || l.loanId} value={l.id || l.loanId}>
+                          {l.loanNumber || `LN-${String(l.id).slice(-6)}`}{dateSuffix} — Principal: {formatCurrency(l.originalPrincipal || l.principalAmount)} | Outstanding: {formatCurrency(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0))} ({l.status || 'ACTIVE'})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1254,16 +1595,16 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                       className="form-input"
                       value={repayForm.year}
                       onChange={(e) => {
-                        const y = e.target.value;
+                        const y = e.target.value.slice(0, 4);
                         setRepayForm({
                           ...repayForm,
                           year: y,
-                          payment_date: `${y}-${String(repayForm.month).padStart(2, '0')}-20`,
+                          payment_date: y.length === 4 ? `${y}-${String(repayForm.month).padStart(2, '0')}-20` : repayForm.payment_date,
                         });
                       }}
                       placeholder="2026"
-                      min="2000"
-                      max="2100"
+                      min="1900"
+                      max="2099"
                       required
                     />
                   </div>
@@ -1274,9 +1615,16 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
                       type="date"
                       className="form-input"
                       value={repayForm.payment_date}
-                      onChange={(e) => setRepayForm({ ...repayForm, payment_date: e.target.value })}
+                      min="1900-01-01"
+                      max="2099-12-31"
+                      onChange={(e) => setRepayForm({ ...repayForm, payment_date: sanitizeDateInput(e.target.value) })}
                       required
                     />
+                    {repayForm.payment_date && (
+                      <div style={{ fontSize: '0.75rem', color: '#64748B', marginTop: '3px', fontWeight: 500 }}>
+                        {formatDate(repayForm.payment_date)}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1329,29 +1677,344 @@ const AdjustmentModal = ({ isOpen, onClose, onSuccess, initialMemberId = null })
             </div>
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
               {memberHistorical.initialEntry && (
-                <span className="badge badge-info" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
-                  {t('adjustment.baseSavings', 'Base Opening')}: {formatCurrency(memberHistorical.initialEntry.paidAmount)} ({formatDate(memberHistorical.initialEntry.paymentDate)})
-                </span>
-              )}
-              {memberHistorical.savings.slice(0, 6).map((s) => (
-                <span key={s.id} className="badge badge-success" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
-                  {formatMonthYear(s.month, s.year, language)}: {formatCurrency(s.paidAmount)}
-                </span>
-              ))}
-              {memberHistorical.loans.map((l) => {
-                const { month: lM, year: lY } = getLoanMonthYear(l.issueDate || l.loanDate || l.loan_date || l.createdAt);
-                const periodStr = lM && lY ? ` (${formatMonthYear(lM, lY, language)})` : '';
-                return (
-                  <span key={l.id} className="badge badge-warning" style={{ padding: '4px 8px', fontSize: '0.75rem' }}>
-                    {t('common.loan', 'Loan')}: {formatCurrency(l.originalPrincipal)}{periodStr} ({t('adjustment.activeLoans', 'Outstanding')}: {formatCurrency(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0))})
+                <div
+                  className="badge badge-info"
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>
+                    {t('adjustment.baseSavings', 'Base Opening')}: {formatCurrency(memberHistorical.initialEntry.paidAmount)} ({formatDate(memberHistorical.initialEntry.paymentDate)})
                   </span>
+                  <button
+                    type="button"
+                    onClick={handleEditInitial}
+                    title={t('common.edit', 'Edit')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: 'inherit',
+                      opacity: 0.85,
+                    }}
+                  >
+                    <Pencil size={11} />
+                  </button>
+                </div>
+              )}
+
+              {memberHistorical.savings.map((s) => (
+                <div
+                  key={s.id}
+                  className="badge badge-success"
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                  }}
+                >
+                  <span>
+                    {formatMonthYear(s.month, s.year, language)}: {formatCurrency(s.paidAmount || s.amount)}{(s.paymentDate || s.payment_date) ? ` (${formatDate(s.paymentDate || s.payment_date)})` : ''}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleEditSaving(s)}
+                    title={t('common.edit', 'Edit')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: 'inherit',
+                      opacity: 0.85,
+                    }}
+                  >
+                    <Pencil size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteSaving(s)}
+                    title={t('common.delete', 'Delete')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: '#EF4444',
+                      opacity: 0.9,
+                    }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
+
+              {memberHistorical.loans.map((l) => {
+                const lDate = l.issueDate || l.loanDate || l.loan_date || l.createdAt;
+                const { month: lM, year: lY } = getLoanMonthYear(lDate);
+                const periodStr = lM && lY ? ` (${formatMonthYear(lM, lY, language)})` : '';
+                const dateStr = lDate ? ` (${formatDate(lDate)})` : periodStr;
+                return (
+                  <div
+                    key={l.id}
+                    className="badge badge-warning"
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '0.75rem',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span>
+                      {t('common.loan', 'Loan')}: {formatCurrency(l.originalPrincipal)}{dateStr} ({t('adjustment.activeLoans', 'Outstanding')}: {formatCurrency(l.pendingPrincipal !== undefined ? l.pendingPrincipal : (l.remainingAmount || 0))})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleEditLoan(l)}
+                      title={t('common.edit', 'Edit')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: 'inherit',
+                        opacity: 0.85,
+                      }}
+                    >
+                      <Pencil size={11} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteLoan(l)}
+                      title={t('common.delete', 'Delete')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: '2px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        color: '#EF4444',
+                        opacity: 0.9,
+                      }}
+                    >
+                      <Trash2 size={11} />
+                    </button>
+                  </div>
                 );
               })}
+
+              {memberHistorical.repayments && memberHistorical.repayments.map((r) => (
+                <div
+                  key={r.id}
+                  className="badge badge-info"
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '0.75rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    background: '#F1F5F9',
+                    color: '#334155',
+                    border: '1px solid #CBD5E1',
+                  }}
+                >
+                  <span>
+                    {t('adjustment.tabRepayments', 'Repayment')}: {formatCurrency(r.amount || r.totalPaid || ((r.principalAmount || 0) + (r.interestAmount || 0)))} ({formatDate(r.paymentDate || r.payment_date)})
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteRepayment(r)}
+                    title={t('common.delete', 'Delete')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      color: '#EF4444',
+                      opacity: 0.9,
+                    }}
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
         )}
         </div>
       </Modal>
+
+      {/* Custom Centered Delete Confirmation Dialog */}
+      {deleteConfirm && typeof document !== 'undefined' && createPortal(
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={deleteConfirm.title || 'Are you sure you want to delete?'}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 11000,
+            padding: '16px',
+            backdropFilter: 'blur(2px)',
+          }}
+          onClick={() => {
+            if (!submitting) setDeleteConfirm(null);
+          }}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: '14px',
+              padding: '24px 28px',
+              maxWidth: '420px',
+              width: '100%',
+              boxShadow: '0 20px 30px -5px rgba(0, 0, 0, 0.3), 0 10px 15px -5px rgba(0, 0, 0, 0.1)',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '14px',
+              border: '1px solid #E5E7EB',
+              animation: 'fadeIn 0.15s ease-out forwards',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '50%',
+                background: '#FEE2E2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#DC2626',
+              }}
+            >
+              <Trash2 size={24} />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+              <h3
+                style={{
+                  margin: 0,
+                  fontSize: '1.15rem',
+                  fontWeight: 700,
+                  color: '#111827',
+                }}
+              >
+                {deleteConfirm.title || t('adjustment.confirmDeleteTitle', 'Are you sure you want to delete?')}
+              </h3>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '0.95rem',
+                  fontWeight: 600,
+                  color: '#4B5563',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {deleteConfirm.recordInfo}
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                width: '100%',
+                justifyContent: 'center',
+                marginTop: '6px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  if (deleteConfirm?.onConfirm) {
+                    deleteConfirm.onConfirm();
+                  }
+                }}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#DC2626',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  opacity: submitting ? 0.7 : 1,
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!submitting) e.currentTarget.style.backgroundColor = '#B91C1C';
+                }}
+                onMouseLeave={(e) => {
+                  if (!submitting) e.currentTarget.style.backgroundColor = '#DC2626';
+                }}
+              >
+                {submitting ? t('common.loading', 'Deleting...') : (t('common.yes', 'Yes') || 'Yes')}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                disabled={submitting}
+                style={{
+                  flex: 1,
+                  padding: '10px 16px',
+                  backgroundColor: '#16A34A',
+                  color: '#FFFFFF',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontWeight: 700,
+                  fontSize: '0.95rem',
+                  cursor: submitting ? 'not-allowed' : 'pointer',
+                  opacity: submitting ? 0.7 : 1,
+                  transition: 'background-color 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!submitting) e.currentTarget.style.backgroundColor = '#15803D';
+                }}
+                onMouseLeave={(e) => {
+                  if (!submitting) e.currentTarget.style.backgroundColor = '#16A34A';
+                }}
+              >
+                {t('common.cancel', 'Cancel') || 'Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* Floating Centered Success Toast */}
       {toastMessage && typeof document !== 'undefined' && createPortal(

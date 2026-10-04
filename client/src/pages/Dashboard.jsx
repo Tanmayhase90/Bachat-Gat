@@ -7,7 +7,7 @@ import StatCard from '../components/common/StatCard';
 import Loader from '../components/common/Loader';
 import EmptyState from '../components/common/EmptyState';
 import Modal from '../components/common/Modal';
-import { formatCurrency, formatNumber, formatDate, formatMonthYear, formatPercentage, formatMonthlyHaftaDueDate } from '../utils/formatters';
+import { formatCurrency, formatNumber, formatDate, formatActivityDateTime, getActivityTimestamp, formatMonthYear, formatPercentage, formatMonthlyHaftaDueDate } from '../utils/formatters';
 import {
   Wallet,
   PiggyBank,
@@ -605,12 +605,7 @@ const Dashboard = () => {
             {displayText}
           </div>
           <div style={{ fontSize: '0.725rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-            {formatDate(act.created_at || act.date, {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
+            {formatActivityDateTime(act.created_at || act.createdAt || act.date, act)}
           </div>
         </div>
         {amount > 0 && (
@@ -1036,7 +1031,14 @@ const Dashboard = () => {
                 {t('dashboard.noRecentActivity')}
               </div>
             ) : (
-              activities.map((act) => renderActivityItem(act))
+              [...activities]
+                .sort((a, b) => {
+                  const tA = getActivityTimestamp(a);
+                  const tB = getActivityTimestamp(b);
+                  if (tB !== tA) return tB - tA;
+                  return String(b.id || '').localeCompare(String(a.id || ''));
+                })
+                .map((act) => renderActivityItem(act))
             )}
           </div>
         </div>
@@ -1230,7 +1232,13 @@ const Dashboard = () => {
             >
               {(() => {
                 const listToDisplay = allActivities.length > 0 ? allActivities : activities;
-                const filtered = listToDisplay.filter((act) => {
+                const sortedList = [...listToDisplay].sort((a, b) => {
+                  const tA = getActivityTimestamp(a);
+                  const tB = getActivityTimestamp(b);
+                  if (tB !== tA) return tB - tA;
+                  return String(b.id || '').localeCompare(String(a.id || ''));
+                });
+                const filtered = sortedList.filter((act) => {
                   if (!matchesTransactionType(act, selectedTypeFilter)) {
                     return false;
                   }

@@ -20,6 +20,7 @@ import {
   normalizeSavings,
   normalizeLoan,
   normalizeActivity,
+  getActivityTimestamp,
   DEFAULT_GROUP_ID,
   isRegularMember,
   calculateMonthlyMemberStatus,
@@ -485,7 +486,12 @@ export const dashboardService = {
             year: year ? Number(year) : undefined,
           };
         })
-        .sort((a, b) => new Date(b.date) - new Date(a.date));
+        .sort((a, b) => {
+          const tA = getActivityTimestamp(a);
+          const tB = getActivityTimestamp(b);
+          if (tB !== tA) return tB - tA;
+          return String(b.id || '').localeCompare(String(a.id || ''));
+        });
 
       // If activities collection is empty, fallback to recent contributions, loans, and repayments
       if (activities.length === 0) {
@@ -552,7 +558,12 @@ export const dashboardService = {
           });
         });
 
-        fallbackItems.sort((a, b) => new Date(b.date) - new Date(a.date));
+        fallbackItems.sort((a, b) => {
+          const tA = getActivityTimestamp(a);
+          const tB = getActivityTimestamp(b);
+          if (tB !== tA) return tB - tA;
+          return String(b.id || '').localeCompare(String(a.id || ''));
+        });
         activities = fallbackItems;
       }
 

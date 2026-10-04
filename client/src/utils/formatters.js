@@ -70,24 +70,27 @@ const SHORT_MONTH_NAMES = [
 
 /**
  * Safely format dates to DD Mon YYYY (e.g. "10 Dec 2026", "01 Jul 2026", "15 Aug 2026")
+ * If time options are provided, formats to "DD Mon YYYY, hh:mm A" (e.g. "04 Oct 2026, 10:30 AM")
  * (handles Firebase Timestamp, Date object, ISO string, milliseconds, and DD-MM-YYYY)
  */
-export const formatDate = (value) => {
+export const formatDate = (value, options = {}) => {
   if (!value) return '-';
   try {
     let d;
     if (value && typeof value.toDate === 'function') {
       d = value.toDate();
     } else if (value && typeof value.seconds === 'number') {
-      d = new Date(value.seconds * 1000);
+      d = new Date(value.seconds * 1000 + (value.nanoseconds ? value.nanoseconds / 1e6 : 0));
     } else if (value instanceof Date) {
       d = value;
+    } else if (typeof value === 'number' && !isNaN(value) && value > 0) {
+      d = new Date(value);
     } else if (typeof value === 'string') {
       const trimmed = value.trim();
-      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
-        const [y, m, day] = trimmed.split('T')[0].split('-').map(Number);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        const [y, m, day] = trimmed.split('-').map(Number);
         d = new Date(y, m - 1, day);
-      } else if (/^\d{2}-\d{2}-\d{4}/.test(trimmed)) {
+      } else if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
         const [day, m, y] = trimmed.split('-').map(Number);
         d = new Date(y, m - 1, day);
       } else {
@@ -102,7 +105,153 @@ export const formatDate = (value) => {
     if (year < 1900 || year > 2099) return '-';
     const day = String(d.getDate()).padStart(2, '0');
     const month = SHORT_MONTH_NAMES[d.getMonth()] || 'Jan';
+
+    if (options && (options.hour || options.time || options.includeTime)) {
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const hoursStr = String(hours).padStart(2, '0');
+      return `${day} ${month} ${year}, ${hoursStr}:${minutes} ${ampm}`;
+    }
+
     return `${day} ${month} ${year}`;
+  } catch (err) {
+    return '-';
+  }
+};
+
+/**
+ * Safely extracts the exact numerical timestamp (in milliseconds) from an activity object or raw date.
+ * Strictly uses existing stored fields (created_at, createdAt, timestamp, date, updatedAt, or ID timestamp).
+ */
+export const getActivityTimestamp = (act) => {
+  if (!act) return 0;
+  if (typeof act === 'number' && !isNaN(act) && act > 0) return act;
+  if (act instanceof Date && !isNaN(act.getTime())) return act.getTime();
+
+  // 1. Try ISO date-time strings, Timestamps, or Date instances on exact creation fields
+  const timeFields = [
+    act.created_at,
+    act.createdAt,
+    act.timestamp,
+    act.date,
+    act.updatedAt,
+    act.updated_at,
+  ];
+
+  for (const val of timeFields) {
+    if (!val) continue;
+    if (typeof val === 'number' && !isNaN(val) && val > 0) return val;
+    if (typeof val.toDate === 'function') {
+      const d = val.toDate();
+      if (!isNaN(d.getTime())) return d.getTime();
+    }
+    if (typeof val.seconds === 'number') {
+      return val.seconds * 1000 + (val.nanoseconds ? val.nanoseconds / 1e6 : 0);
+    }
+    if (val instanceof Date && !isNaN(val.getTime())) {
+      return val.getTime();
+    }
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      if (trimmed.includes('T') || trimmed.includes(':') || trimmed.includes('Z')) {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) return d.getTime();
+      }
+    }
+  }
+
+  // 2. Extract numeric millisecond timestamp from Document ID if present (e.g. ACT_1728017340000_del)
+  const actId = String(act.id || act._doc_id || '');
+  const idMatch = actId.match(/ACT_(\d{10,13})/);
+  if (idMatch) {
+    const num = parseInt(idMatch[1], 10);
+    const ms = idMatch[1].length === 10 ? num * 1000 : num;
+    if (!isNaN(ms) && ms > 0) return ms;
+  }
+
+  // 3. Fallback to parsing any pure date string (e.g. '2026-10-04' or '04-10-2026')
+  for (const val of timeFields) {
+    if (typeof val === 'string' && val.trim()) {
+      const trimmed = val.trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+        const [y, m, day] = trimmed.split('T')[0].split('-').map(Number);
+        const d = new Date(y, m - 1, day);
+        if (!isNaN(d.getTime())) return d.getTime();
+      } else if (/^\d{2}-\d{2}-\d{4}/.test(trimmed)) {
+        const [day, m, y] = trimmed.split('-').map(Number);
+        const d = new Date(y, m - 1, day);
+        if (!isNaN(d.getTime())) return d.getTime();
+      } else {
+        const d = new Date(trimmed);
+        if (!isNaN(d.getTime())) return d.getTime();
+      }
+    }
+  }
+
+  return 0;
+};
+
+/**
+ * Safely format activity date and exact time into "DD Mon YYYY, hh:mm A" (e.g. "04 Oct 2026, 10:30 AM")
+ * Uses the existing timestamp from created_at, createdAt, timestamp, date, or activity ID.
+ */
+export const formatActivityDateTime = (value, act = null) => {
+  if (!value && !act) return '-';
+  try {
+    let d;
+    // 1. Direct object / Timestamp checking
+    if (value && typeof value.toDate === 'function') {
+      d = value.toDate();
+    } else if (value && typeof value.seconds === 'number') {
+      d = new Date(value.seconds * 1000 + (value.nanoseconds ? value.nanoseconds / 1e6 : 0));
+    } else if (value instanceof Date) {
+      d = value;
+    } else if (typeof value === 'number' && !isNaN(value) && value > 0) {
+      d = new Date(value);
+    } else if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed.includes('T') || trimmed.includes(':') || trimmed.includes('Z')) {
+        d = new Date(trimmed);
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || /^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+        const ts = act ? getActivityTimestamp(act) : 0;
+        if (ts > 0) {
+          d = new Date(ts);
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          const [y, m, day] = trimmed.split('-').map(Number);
+          d = new Date(y, m - 1, day);
+        } else {
+          const [day, m, y] = trimmed.split('-').map(Number);
+          d = new Date(y, m - 1, day);
+        }
+      } else {
+        d = new Date(trimmed);
+      }
+    }
+
+    if ((!d || isNaN(d.getTime())) && act) {
+      const ts = getActivityTimestamp(act);
+      if (ts > 0) d = new Date(ts);
+    }
+
+    if (!d || isNaN(d.getTime())) return '-';
+
+    const year = d.getFullYear();
+    if (year < 1900 || year > 2099) return '-';
+
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = SHORT_MONTH_NAMES[d.getMonth()] || 'Jan';
+
+    let hours = d.getHours();
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const hoursStr = String(hours).padStart(2, '0');
+
+    return `${day} ${month} ${year}, ${hoursStr}:${minutes} ${ampm}`;
   } catch (err) {
     return '-';
   }

@@ -407,13 +407,14 @@ const Dashboard = () => {
       }
 
       // 2. Historical Monthly Saving Deletion (from Manual Historical Data Adjustment)
-      if (
+      const isHistoricalSavingDeletion =
         type === 'SAVING_DELETED' ||
         type === 'HISTORICAL_SAVING_DELETED' ||
-        (lowerDesc.includes('historical') && lowerDesc.includes('saving') && (lowerDesc.includes('deleted') || lowerDesc.includes('हटवले') || lowerDesc.includes('हटवला'))) ||
-        lowerDesc.startsWith('historical monthly saving') ||
-        lowerDesc.startsWith('historical monthly savings')
-      ) {
+        ((lowerDesc.includes('historical') || lowerDesc.includes('जुनी')) &&
+          (lowerDesc.includes('saving') || lowerDesc.includes('बचत')) &&
+          (lowerDesc.includes('deleted') || lowerDesc.includes('हटवले') || lowerDesc.includes('हटवला')));
+
+      if (isHistoricalSavingDeletion) {
         let resolvedName = memberName;
         if (!resolvedName && rawDesc) {
           const match = rawDesc.match(/for\s+([^—–(]+)/i) || rawDesc.match(/(?:deleted|हटवला|हटवले)[:\s-]+(.+)$/i);
@@ -424,6 +425,86 @@ const Dashboard = () => {
         if (!resolvedName) resolvedName = 'Member';
         const formattedAmt = amtStr || (rawDesc.match(/₹\s*[\d,]+/)?.[0] || '₹0');
         return `Historical monthly saving of ${formattedAmt} deleted for ${resolvedName}`;
+      }
+
+      // 3. Historical Monthly Saving Collection / Update (from Manual Historical Data Adjustment)
+      const isHistoricalSaving =
+        !isHistoricalSavingDeletion &&
+        (((lowerDesc.includes('historical') || lowerDesc.includes('जुनी')) && (lowerDesc.includes('saving') || lowerDesc.includes('बचत'))) ||
+          (lowerDesc.includes('monthly saving') && (lowerDesc.includes('collected for') || lowerDesc.includes('recorded for') || lowerDesc.includes('updated for'))) ||
+          (lowerDesc.includes('monthly savings') && (lowerDesc.includes('collected for') || lowerDesc.includes('recorded for') || lowerDesc.includes('updated for'))) ||
+          type === 'HISTORICAL_SAVING' ||
+          type === 'HISTORICAL_SAVINGS');
+
+      if (isHistoricalSaving) {
+        let resolvedName = memberName;
+        if (!resolvedName && rawDesc) {
+          const match = rawDesc.match(/for\s+([^—–(]+)/i) || rawDesc.match(/from\s+([^—–(]+)/i) || rawDesc.match(/(?:recorded|updated|collected)[:\s-]+(.+)$/i);
+          if (match && match[1]) {
+            resolvedName = match[1].replace(/\(.*\)/, '').trim();
+          }
+        }
+        if (!resolvedName) resolvedName = 'Member';
+
+        let formattedMember = resolvedName;
+        if (formattedMember && formattedMember.toLowerCase() !== 'member') {
+          formattedMember = formattedMember.split(' ').map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : '')).join(' ');
+        }
+
+        const formattedAmt = amtStr || (rawDesc.match(/₹\s*[\d,]+/)?.[0] || '₹0');
+
+        let m = act.month;
+        let y = act.year;
+
+        if ((!m || !y) && (act.id || act.referenceId)) {
+          const match = (String(act.id || '') + ' ' + String(act.referenceId || '')).match(/(?:C|T)_[^_]+_(\d{4})_(\d{1,2})/i) || (String(act.id || '') + ' ' + String(act.referenceId || '')).match(/_(\d{4})_(\d{1,2})/);
+          if (match) {
+            y = parseInt(match[1], 10);
+            m = parseInt(match[2], 10);
+          }
+        }
+
+        if ((!m || !y) && rawDesc) {
+          const yearMatch = rawDesc.match(/\b(20\d{2})\b/);
+          if (yearMatch) {
+            y = parseInt(yearMatch[1], 10);
+            const enMonths = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+            const mrMonths = ['जानेवारी', 'फेब्रुवारी', 'मार्च', 'एप्रिल', 'मे', 'जून', 'जुलै', 'ऑगस्ट', 'सप्टेंबर', 'ऑक्टोबर', 'नोव्हेंबर', 'डिसेंबर'];
+            for (let i = 0; i < 12; i++) {
+              if (lowerDesc.includes(enMonths[i]) || rawDesc.includes(mrMonths[i])) {
+                m = i + 1;
+                break;
+              }
+            }
+          }
+        }
+
+        let periodStr = '';
+        if (m !== undefined && m !== null && y) {
+          periodStr = formatMonthYear(m, y, isMarathi ? 'mr' : 'en');
+        }
+
+        const isUpdate = lowerDesc.includes('updated') || lowerDesc.includes('अपडेट') || type.includes('UPDATE');
+
+        if (isMarathi) {
+          if (periodStr) {
+            return isUpdate
+              ? `${periodStr} मासिक बचत ${formattedAmt} अपडेट केली - ${formattedMember}`
+              : `${periodStr} मासिक बचत ${formattedAmt} जमा केली - ${formattedMember}`;
+          }
+          return isUpdate
+            ? `जुनी मासिक बचत ${formattedAmt} अपडेट केली - ${formattedMember}`
+            : `जुनी मासिक बचत ${formattedAmt} जमा केली - ${formattedMember}`;
+        } else {
+          if (periodStr) {
+            return isUpdate
+              ? `${periodStr} monthly saving of ${formattedAmt} updated for ${formattedMember}`
+              : `${periodStr} monthly saving of ${formattedAmt} collected for ${formattedMember}`;
+          }
+          return isUpdate
+            ? `Historical monthly saving of ${formattedAmt} updated for ${formattedMember}`
+            : `Historical monthly saving of ${formattedAmt} collected for ${formattedMember}`;
+        }
       }
 
       // 3. Historical Repayment Deletion (from Manual Historical Data Adjustment)

@@ -569,8 +569,8 @@ export const adjustmentService = {
         type: 'saving',
         amount,
         description: isUpdated
-          ? `Historical monthly savings ₹${amount.toLocaleString('en-IN')} updated for ${memberName} (${formatMonthYear(month, year)})`
-          : `Historical monthly savings ₹${amount.toLocaleString('en-IN')} recorded for ${memberName} (${formatMonthYear(month, year)})`,
+          ? `${formatMonthYear(month, year)} monthly saving of ₹${amount.toLocaleString('en-IN')} updated for ${memberName}`
+          : `${formatMonthYear(month, year)} monthly saving of ₹${amount.toLocaleString('en-IN')} collected for ${memberName}`,
         memberId,
         memberName,
         referenceId: docId,
